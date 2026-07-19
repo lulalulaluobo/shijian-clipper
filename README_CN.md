@@ -7,12 +7,20 @@
 ## Android App
 
 - 应用名：拾笺（Shijian）
-- 默认服务：`https://wechat.lucc.fun`
+- 默认服务：`https://wechat.fun`（或您的自部署地址）
 - 自部署：在「设置」中修改服务地址，然后重新登录。
-- 输入：在系统分享面板分享微信公众号文章，或粘贴 HTTPS 文章链接。
-- 输出：文章 Markdown 会写入配置的 Fast Note Sync 仓库与 Obsidian 目录；图片保留原始链接。
+- 输入：在系统分享面板分享公众号链接（文本）、在系统分享面板分享**任何文件/图片**，或粘贴 HTTPS 公众号文章链接 / 在主界面聊天框上传附件。
+- 输出：公众号文章转存至**微信公众号目录**，附件（图片、PDF、表格等）转存至设置中指定的**附件转存目录**。两者均保存在用户配置的自建 Fast Note Sync 仓库中。
 - 状态：任务排队或执行时，首页会自动刷新状态；完成、失败后会停止刷新并显示最终状态。
 - 关于：在「设置」可查看当前版本与 GitHub 项目。应用会检查最新 GitHub Release，高亮新版本；下载后校验 SHA-256 与发布签名，最后仍由 Android 系统要求用户确认安装。
+
+### 应用截图
+<p align="center">
+  <img src="assets/screenshots/main.jpg" width="30%" />
+  &nbsp; &nbsp; &nbsp; &nbsp;
+  <img src="assets/screenshots/settings.jpg" width="30%" />
+</p>
+
 
 ## 邀请码与使用期限管理
 
