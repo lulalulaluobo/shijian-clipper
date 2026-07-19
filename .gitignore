@@ -7,6 +7,9 @@ references/
 .worktrees/
 .superpowers/
 .venv/
+android/.gradle/
+android/build/
+android/app/build/
 __pycache__/
 *.db-shm
 *.db-wal

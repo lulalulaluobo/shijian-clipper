@@ -1,0 +1,20 @@
+package com.lulalulaluobo.wechatclipper
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class WechatUrlTest {
+    @Test
+    fun extractsWechatArticleUrlFromSharedText() {
+        assertEquals(
+            "https://mp.weixin.qq.com/s/example?from=singlemessage",
+            extractWechatUrl("文章链接：https://mp.weixin.qq.com/s/example?from=singlemessage 欢迎阅读"),
+        )
+    }
+
+    @Test
+    fun rejectsNonWechatSharedText() {
+        assertNull(extractWechatUrl("https://example.com/article"))
+    }
+}
