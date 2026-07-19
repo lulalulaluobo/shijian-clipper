@@ -19,6 +19,8 @@ def process_once(service, fetch: Callable, post: Callable, run_clip=run) -> bool
         service.finish_task(task["id"], result)
     except ClipError as error:
         service.fail_task(task["id"], error)
+    except Exception:
+        service.fail_task(task["id"], ClipError("worker", "转存任务处理失败"))
     return True
 
 

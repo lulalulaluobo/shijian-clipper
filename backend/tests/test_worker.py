@@ -19,7 +19,7 @@ class FakeService:
         self.finished = (task_id, result)
 
     def fail_task(self, task_id, error):
-        self.failed = (task_id, error.stage)
+        self.failed = (task_id, error.stage, str(error))
 
 
 def test_process_once_marks_task_succeeded():
@@ -36,4 +36,15 @@ def test_process_once_maps_clip_error_to_failed_task():
         raise ClipError("fetch", "文章抓取失败")
 
     assert process_once(service, lambda *_: "", lambda *_: {}, run_clip=fail) is True
-    assert service.failed == ("task-a", "fetch")
+    assert service.failed == ("task-a", "fetch", "文章抓取失败")
+
+
+def test_process_once_marks_unexpected_errors_without_exposing_details():
+    class BrokenService(FakeService):
+        def decrypt_fns_config(self, user_id):
+            raise RuntimeError("token=secret")
+
+    service = BrokenService()
+
+    assert process_once(service, lambda *_: "", lambda *_: {}) is True
+    assert service.failed == ("task-a", "worker", "转存任务处理失败")
