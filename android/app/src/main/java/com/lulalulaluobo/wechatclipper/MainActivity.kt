@@ -318,7 +318,11 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                     scope.launch {
                         try {
                             val checked = withContext(Dispatchers.IO) { client.checkFnsSettings() }
-                            message = if (checked.vaultExists) "连接成功，已找到目标仓库。" else "连接成功，但未找到这个仓库。"
+                            message = when {
+                                !checked.vaultChecked -> "连接成功；当前 token 无权限读取仓库列表，将按填写的仓库写入。"
+                                checked.vaultExists -> "连接成功，已找到目标仓库。"
+                                else -> "连接成功，但未找到这个仓库。"
+                            }
                         } catch (error: Exception) {
                             message = error.userMessage()
                         } finally {

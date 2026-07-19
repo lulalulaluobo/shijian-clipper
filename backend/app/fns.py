@@ -23,7 +23,13 @@ def check_fns(base_url: str, token: str, vault: str, get) -> dict[str, bool]:
         response = get(f"{base_url.rstrip('/')}/api/vault", headers)
     except Exception as error:
         raise ApiError("Fast Note Sync 连接失败", 400) from error
+    if isinstance(response, dict) and response.get("code") == 314:
+        return {"connected": True, "vault_exists": False, "vault_checked": False}
     vaults = response.get("data") if isinstance(response, dict) else None
     if not isinstance(vaults, list):
         raise ApiError("Fast Note Sync 响应无效", 400)
-    return {"connected": True, "vault_exists": any(isinstance(item, dict) and item.get("vault") == vault for item in vaults)}
+    return {
+        "connected": True,
+        "vault_exists": any(isinstance(item, dict) and item.get("vault") == vault for item in vaults),
+        "vault_checked": True,
+    }

@@ -36,7 +36,7 @@ def test_check_settings_decrypts_token_without_returning_it():
 
     result = service.check_fns_settings("user-a")
 
-    assert result == {"connected": True, "vault_exists": True}
+    assert result == {"connected": True, "vault_exists": True, "vault_checked": True}
     assert calls[0][1]["token"] == "secret"
     assert "secret" not in repr(result)
 

@@ -7,7 +7,7 @@ import java.net.URL
 
 data class Session(val baseUrl: String, val token: String)
 data class FnsSettings(val configured: Boolean, val baseUrl: String, val vault: String, val targetDir: String)
-data class FnsCheck(val vaultExists: Boolean)
+data class FnsCheck(val vaultExists: Boolean, val vaultChecked: Boolean)
 data class ClipTask(val id: String, val sourceUrl: String, val status: String, val title: String, val errorMessage: String)
 
 class ApiException(override val message: String) : Exception(message)
@@ -37,7 +37,10 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
         return FnsSettings(true, response.optString("base_url"), response.optString("vault"), response.optString("target_dir"))
     }
 
-    fun checkFnsSettings(): FnsCheck = FnsCheck(request("POST", "/v1/settings/fns/check").optBoolean("vault_exists"))
+    fun checkFnsSettings(): FnsCheck {
+        val response = request("POST", "/v1/settings/fns/check")
+        return FnsCheck(response.optBoolean("vault_exists"), response.optBoolean("vault_checked", true))
+    }
 
     fun createClip(url: String): ClipTask = taskFrom(request("POST", "/v1/clips", JSONObject().put("url", url)))
 
