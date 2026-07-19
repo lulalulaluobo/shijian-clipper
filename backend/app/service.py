@@ -41,8 +41,9 @@ class ClipService:
                 self.pocketbase.update_record(
                     "invite_codes",
                     invitations[0]["id"],
-                    {"used_by": user_id, "used_at": datetime.now(UTC).isoformat()},
+                    {"used_by": user_email, "used_at": datetime.now(UTC).isoformat()},
                 )
+
             except Exception:
                 self.pocketbase.delete_record("users", user_id)
                 raise
