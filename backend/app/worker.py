@@ -4,18 +4,27 @@ import time
 from backend.app.config import Settings
 from backend.app.pocketbase import PocketBaseClient
 from backend.app.service import ClipService
-from backend.app.safe_http import request_public_json
 from poc.clip import run
-from poc.wechat import ClipError, fetch_wechat_article
+from poc.wechat import ClipError, _safe_filename, fetch_wechat_article
 
 
-def process_once(service, fetch: Callable, post: Callable, run_clip=run) -> bool:
+def process_once(service, fetch: Callable, run_clip: Callable = run) -> bool:
+    """取一条 queued 任务，抓取文章并落 notes 表。成功返回 True，无任务返回 False。"""
     task = service.claim_next_task()
     if task is None:
         return False
     try:
-        result = run_clip(task["source_url"], service.decrypt_fns_config(task["user"]), fetch, post)
-        service.finish_task(task["id"], result)
+        result = run_clip(task["source_url"], fetch)
+        service.create_note(
+            task["user"],
+            result["source_url"],
+            result["title"],
+            f"{_safe_filename(result['title'])}.md",
+            result["markdown"],
+            result["images"],
+            kind="article",
+        )
+        service.finish_task(task["id"], {"title": result["title"], "path": "待 Obsidian 插件同步"})
     except ClipError as error:
         service.fail_task(task["id"], error)
     except Exception:
@@ -23,18 +32,13 @@ def process_once(service, fetch: Callable, post: Callable, run_clip=run) -> bool
     return True
 
 
-def post_fns(url: str, headers: dict[str, str], payload: dict[str, str]) -> dict:
-    return request_public_json(url, method="POST", headers=headers, payload=payload)
-
-
 def main() -> None:
     settings = Settings.from_env()
     service = ClipService(
         PocketBaseClient(settings.pocketbase_url, settings.pocketbase_admin_email, settings.pocketbase_admin_password),
-        settings.fns_encryption_key,
     )
     while True:
-        if not process_once(service, fetch_wechat_article, post_fns):
+        if not process_once(service, fetch_wechat_article):
             time.sleep(settings.poll_interval_seconds)
 
 
