@@ -56,6 +56,14 @@ class PocketBaseClient:
             body={"email": email, "password": password, "passwordConfirm": password},
         )
 
+    def create_record(self, collection: str, body: dict) -> dict:
+        return self.request(
+            "POST",
+            f"/api/collections/{collection}/records",
+            token=self._admin_token(),
+            body=body,
+        )
+
     def update_record(self, collection: str, record_id: str, body: dict) -> dict:
         return self.request(
             "PATCH",

@@ -2,12 +2,15 @@ import hashlib
 from datetime import UTC, datetime
 from threading import Lock
 
+from backend.app.crypto import encrypt_token
 from backend.app.errors import ApiError
+from backend.app.fns import parse_fns_json
 
 
 class ClipService:
-    def __init__(self, pocketbase) -> None:
+    def __init__(self, pocketbase, fns_encryption_key: str | None = None) -> None:
         self.pocketbase = pocketbase
+        self.fns_encryption_key = fns_encryption_key
         # ponytail: process-local registration lock; use a database transaction before scaling API replicas.
         self._registration_lock = Lock()
 
@@ -37,3 +40,36 @@ class ClipService:
 
     def current_user(self, token: str) -> str:
         return self.pocketbase.authenticate_user(token)
+
+    def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str) -> dict:
+        if not self.fns_encryption_key:
+            raise ApiError("FNS 加密未配置", 500)
+        if not target_dir.strip():
+            raise ApiError("目标目录不能为空", 400)
+        base_url, token, vault = parse_fns_json(raw_json)
+        body = {
+            "user": user_id,
+            "base_url": base_url,
+            "vault": vault,
+            "target_dir": target_dir.strip(),
+            "token_ciphertext": encrypt_token(token, self.fns_encryption_key),
+        }
+        existing = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
+        record = self.pocketbase.update_record("fns_settings", existing[0]["id"], body) if existing else self.pocketbase.create_record("fns_settings", body)
+        return self._settings_summary(record)
+
+    def get_fns_settings(self, user_id: str) -> dict:
+        records = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
+        if not records:
+            return {"configured": False, "token_saved": False}
+        return self._settings_summary(records[0])
+
+    @staticmethod
+    def _settings_summary(record: dict) -> dict:
+        return {
+            "configured": True,
+            "base_url": record["base_url"],
+            "vault": record["vault"],
+            "target_dir": record["target_dir"],
+            "token_saved": bool(record.get("token_ciphertext")),
+        }
