@@ -30,6 +30,8 @@ def validate_wechat_url(url: str) -> str:
 
 
 class _ArticleParser(HTMLParser):
+    _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)
         self.title = ""
@@ -60,8 +62,9 @@ class _ArticleParser(HTMLParser):
             self._content_depth = 1
             return
         if self._content_depth:
-            self._content_depth += 1
             self.content_parts.append(self.get_starttag_text())
+            if tag not in self._VOID_TAGS:
+                self._content_depth += 1
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self._content_depth:
@@ -72,7 +75,7 @@ class _ArticleParser(HTMLParser):
             self._author_depth -= 1
         if self._fallback_title_depth:
             self._fallback_title_depth -= 1
-        if self._content_depth:
+        if self._content_depth and tag not in self._VOID_TAGS:
             self._content_depth -= 1
             if self._content_depth:
                 self.content_parts.append(f"</{tag}>")

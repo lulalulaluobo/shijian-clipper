@@ -30,3 +30,17 @@ class ExtractArticleTests(unittest.TestCase):
         self.assertEqual(article.title, "测试文章")
         self.assertEqual(article.author, "测试作者")
         self.assertEqual(article.content_html, "<p>第一段</p><p><strong>重点</strong></p>")
+
+    def test_stops_after_content_with_void_image_tag(self):
+        source_html = (
+            '<meta property="og:title" content="测试文章">'
+            '<div id="js_content"><p>正文</p><img data-src="https://mmbiz.qpic.cn/a.jpg"></div>'
+            '<p>不属于正文的页脚</p>'
+        )
+
+        article = extract_article(source_html, "https://mp.weixin.qq.com/s/example")
+
+        self.assertEqual(
+            article.content_html,
+            '<p>正文</p><img data-src="https://mmbiz.qpic.cn/a.jpg">',
+        )
