@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -258,14 +257,13 @@ private fun ChatScreen(
             try {
                 var progressText by mutableStateOf("正在上传附件 $filename: 0%")
                 message = progressText
-                val task = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     client.uploadAttachment(filename, content) { progress ->
                         progressText = "正在上传附件 $filename: $progress%"
                         message = progressText
                     }
                 }
-                tasks = listOf(task) + tasks
-                message = "附件 $filename 上传成功。"
+                message = "${result.filename} 已上传，等待 Obsidian 同步"
                 refresh()
             } catch (error: Exception) {
                 message = error.userMessage()
@@ -397,14 +395,10 @@ private fun TaskCard(task: ClipTask, onRetry: (ClipTask) -> Unit) {
 private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () -> Unit, onServerChanged: (String) -> Unit) {
     val client = remember(session) { ApiClient(session.baseUrl, session.token) }
     val context = LocalContext.current
-    var config by remember { mutableStateOf("") }
-    var targetDir by remember { mutableStateOf("") }
-    var attachmentDir by remember { mutableStateOf("") }
-    var summary by remember { mutableStateOf<FnsSettings?>(null) }
     var canCreateInvites by remember { mutableStateOf(false) }
     var inviteCode by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf(session.baseUrl) }
-    var message by remember { mutableStateOf("保存 FNS JSON 后，令牌只保存在服务端加密存储中。") }
+    var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var availableUpdate by remember { mutableStateOf<ReleaseUpdate?>(null) }
     var updateMessage by remember { mutableStateOf("正在检查应用更新…") }
@@ -428,9 +422,6 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
 
     LaunchedEffect(session) {
         try {
-            summary = withContext(Dispatchers.IO) { client.getFnsSettings() }
-            targetDir = summary?.targetDir.orEmpty()
-            attachmentDir = summary?.attachmentDir.orEmpty()
             canCreateInvites = withContext(Dispatchers.IO) { client.canCreateInvites() }
         } catch (error: Exception) {
             message = error.userMessage()
@@ -443,54 +434,9 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
             modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Fast Note Sync", style = MaterialTheme.typography.headlineSmall)
-            Text(message, style = MaterialTheme.typography.bodyMedium)
-            if (summary?.configured == true) Text("已连接至 ${summary?.vault} · ${summary?.baseUrl}", style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(config, { config = it }, Modifier.fillMaxWidth(), label = { Text("FNS API 配置 JSON (仅修改目录时可留空)") }, minLines = 5)
-
-            OutlinedTextField(targetDir, { targetDir = it }, Modifier.fillMaxWidth(), label = { Text("微信公众号转存目录") }, singleLine = true)
-            OutlinedTextField(attachmentDir, { attachmentDir = it }, Modifier.fillMaxWidth(), label = { Text("附件转存目录") }, singleLine = true)
-            Button(
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        try {
-                            summary = withContext(Dispatchers.IO) { client.saveFnsSettings(config, targetDir, attachmentDir) }
-                            config = ""
-                            message = "已安全保存配置。"
-                        } catch (error: Exception) {
-                            message = error.userMessage()
-                        } finally {
-                            busy = false
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !busy,
-            ) { Text(if (busy) "正在保存…" else "保存配置") }
-            Button(
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        try {
-                            val checked = withContext(Dispatchers.IO) { client.checkFnsSettings() }
-                            message = when {
-                                !checked.vaultChecked -> "连接成功；当前 token 无权限读取仓库列表，将按填写的仓库写入。"
-                                checked.vaultExists -> "连接成功，已找到目标仓库。"
-                                else -> "连接成功，但未找到这个仓库。"
-                            }
-                        } catch (error: Exception) {
-                            message = error.userMessage()
-
-                        } finally {
-                            busy = false
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = summary?.configured == true && !busy,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-            ) { Text("检测连接（不写入笔记）") }
+            Text("Obsidian 同步", style = MaterialTheme.typography.headlineSmall)
+            Text("文章将在抓取后自动同步到你的 Obsidian 插件。请在 Obsidian 中安装「拾笺同步」插件并登录本服务账号。", style = MaterialTheme.typography.bodyMedium)
+            if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.bodyMedium)
             if (canCreateInvites) {
                 Spacer(Modifier.height(12.dp))
                 Text("成员邀请", style = MaterialTheme.typography.titleMedium)

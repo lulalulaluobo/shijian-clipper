@@ -6,9 +6,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class Session(val baseUrl: String, val token: String)
-data class FnsSettings(val configured: Boolean, val baseUrl: String, val vault: String, val targetDir: String, val attachmentDir: String)
-data class FnsCheck(val vaultExists: Boolean, val vaultChecked: Boolean)
 data class ClipTask(val id: String, val sourceUrl: String, val status: String, val title: String, val errorMessage: String)
+data class AttachmentUploadResult(val id: String, val filename: String)
 
 class ApiException(override val message: String) : Exception(message)
 
@@ -20,28 +19,6 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
     fun login(email: String, password: String): Session {
         val response = request("POST", "/v1/auth/login", JSONObject().put("email", email).put("password", password))
         return Session(baseUrl, response.requiredString("token"))
-    }
-
-    fun getFnsSettings(): FnsSettings {
-        val response = request("GET", "/v1/settings/fns")
-        return FnsSettings(
-            configured = response.optBoolean("configured"),
-            baseUrl = response.optString("base_url"),
-            vault = response.optString("vault"),
-            targetDir = response.optString("target_dir"),
-            attachmentDir = response.optString("attachment_dir"),
-        )
-    }
-
-    fun saveFnsSettings(config: String, targetDir: String, attachmentDir: String): FnsSettings {
-        val response = request("PUT", "/v1/settings/fns", JSONObject().put("config", config).put("target_dir", targetDir).put("attachment_dir", attachmentDir))
-        return FnsSettings(true, response.optString("base_url"), response.optString("vault"), response.optString("target_dir"), response.optString("attachment_dir"))
-    }
-
-
-    fun checkFnsSettings(): FnsCheck {
-        val response = request("POST", "/v1/settings/fns/check")
-        return FnsCheck(response.optBoolean("vault_exists"), response.optBoolean("vault_checked", true))
     }
 
     fun canCreateInvites(): Boolean = request("GET", "/v1/invites").optBoolean("can_create")
@@ -57,9 +34,9 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
 
     fun retryClip(taskId: String): ClipTask = taskFrom(request("POST", "/v1/clips/$taskId/retry"))
 
-    fun uploadAttachment(filename: String, content: ByteArray, onProgress: ((Int) -> Unit)? = null): ClipTask {
+    fun uploadAttachment(filename: String, content: ByteArray, onProgress: ((Int) -> Unit)? = null): AttachmentUploadResult {
         val boundary = "----ShijianAndroid" + java.util.UUID.randomUUID().toString().replace("-", "")
-        val connection = (URL(baseUrl + "/v1/clips/attachments").openConnection() as HttpURLConnection).apply {
+        val connection = (URL(baseUrl + "/v1/clips/files").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 60_000
             readTimeout = 60_000
@@ -68,14 +45,14 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
             token?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
-        
+
         val prefix = ("--$boundary\r\n" +
                 "Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n" +
                 "Content-Type: application/octet-stream\r\n\r\n").toByteArray()
         val suffix = "\r\n--$boundary--\r\n".toByteArray()
-        
+
         connection.setRequestProperty("Content-Length", (prefix.size + content.size + suffix.size).toString())
-        
+
         return try {
             connection.outputStream.use { out ->
                 out.write(prefix)
@@ -90,18 +67,14 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
                 out.write(suffix)
                 out.flush()
             }
-            
+
             val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             val payload = JSONObject(text.ifBlank { "{}" })
             if (connection.responseCode !in 200..299) throw ApiException(payload.optString("message", "服务请求失败"))
-            // Mock returning a ClipTask since FNS response returns path
-            ClipTask(
-                id = java.util.UUID.randomUUID().toString(),
-                sourceUrl = "https://attachment.local/$filename",
-                status = "succeeded",
-                title = filename,
-                errorMessage = ""
+            AttachmentUploadResult(
+                id = payload.optString("id"),
+                filename = payload.optString("filename"),
             )
         } catch (error: ApiException) {
             throw error
