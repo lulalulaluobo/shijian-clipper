@@ -9,7 +9,7 @@ class WechatUrlTest {
     fun extractsWechatArticleUrlFromSharedText() {
         assertEquals(
             "https://mp.weixin.qq.com/s/example?from=singlemessage",
-            extractWechatUrl("文章链接：https://mp.weixin.qq.com/s/example?from=singlemessage 欢迎阅读"),
+            extractWechatUrl("文章链接：https://mp.weixin.qq.com/s/example?from=singlemessage。"),
         )
     }
 

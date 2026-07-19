@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 }
 
 fun extractWechatUrl(text: String): String? = Regex("https://mp\\.weixin\\.qq\\.com/s[^\\s]*")
-    .find(text)?.value
+    .find(text)?.value?.trimEnd('.', ',', '。', '，', '!', '！', ')', '）')
 
 private enum class Page { CHAT, SETTINGS }
 
