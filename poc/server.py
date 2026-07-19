@@ -12,6 +12,17 @@ from poc.wechat import ClipError
 
 MAX_REQUEST_BYTES = 64 * 1024
 INDEX_PATH = Path(__file__).with_name("web") / "index.html"
+WECHAT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 
 def parse_fns_config(value: object, target_dir: object) -> FnsConfig:
@@ -42,7 +53,7 @@ def run_payload(
 
 
 def _fetch(source_url: str, timeout: int = 30) -> str:
-    request = Request(source_url, headers={"User-Agent": "Mozilla/5.0"})
+    request = Request(source_url, headers=WECHAT_HEADERS)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8")
 

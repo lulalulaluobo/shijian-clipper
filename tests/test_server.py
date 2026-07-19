@@ -3,8 +3,9 @@ import json
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest.mock import MagicMock, patch
 
-from poc.server import make_handler, run_payload
+from poc.server import _fetch, make_handler, run_payload
 from poc.wechat import ClipError
 
 
@@ -102,3 +103,21 @@ class LocalHttpServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(content)["stage"], "validate")
         self.assertNotIn(b"do-not-echo", content)
+
+
+class WechatFetchTests(unittest.TestCase):
+    @patch("poc.server.urlopen")
+    def test_uses_reference_project_browser_headers(self, urlopen):
+        response = MagicMock()
+        response.read.return_value = b"<html></html>"
+        urlopen.return_value.__enter__.return_value = response
+
+        _fetch("https://mp.weixin.qq.com/s/example")
+
+        request = urlopen.call_args.args[0]
+        headers = {key.lower(): value for key, value in request.header_items()}
+        self.assertEqual(headers["accept"], "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        self.assertEqual(headers["accept-language"], "zh-CN,zh;q=0.9,en;q=0.8")
+        self.assertEqual(headers["cache-control"], "no-cache")
+        self.assertEqual(headers["pragma"], "no-cache")
+        self.assertEqual(headers["upgrade-insecure-requests"], "1")
