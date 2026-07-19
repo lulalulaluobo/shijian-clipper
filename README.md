@@ -21,7 +21,37 @@ Shijian is an Android and Python service for capturing WeChat public-account art
 </p>
 
 
+
+## iOS client (PWA)
+
+To use Shijian on iOS without Apple Developer Account fees or sideloading limitations, a mobile-optimized PWA is hosted directly on your VPS domain (e.g. `https://wechat.fun`).
+
+### Installation
+1. Open your Shijian service URL (e.g. `https://wechat.lucc.fun`) in **Safari**.
+2. Tap the **Share** button in Safari's bottom toolbar.
+3. Scroll down and select **Add to Home Screen**.
+4. Launch "拾笺" from your Home Screen to experience a standalone, full-screen native-like app interface where you can log in, edit directories, test connections, and upload attachments directly.
+
+### iOS Shortcuts (One-Click System Share Sheet)
+Configure iOS Shortcuts to enable one-click sharing from WeChat or Safari:
+1. **Shortcuts: WeChat URL Clip**:
+   - Create a Shortcut named `拾笺 URL 转存`. Enable **Show in Share Sheet** for **URLs**.
+   - Add action **Get Contents of URL**:
+     - URL: `https://<YOUR_DOMAIN>/v1/clips`
+     - Method: `POST`
+     - Headers: `Content-Type: application/json`, `Authorization: Bearer <YOUR_TOKEN>`
+     - Request Body: `JSON` with key `url` set to `Shortcut Input`.
+2. **Shortcuts: Attachment Upload**:
+   - Create a Shortcut named `拾笺 附件转存`. Enable **Show in Share Sheet** for **Files** and **Images**.
+   - Add action **Get Contents of URL**:
+     - URL: `https://<YOUR_DOMAIN>/v1/clips/attachments`
+     - Method: `POST`
+     - Headers: `Authorization: Bearer <YOUR_TOKEN>`
+     - Request Body: `Form` with key `file` set as File to `Shortcut Input`.
+
+
 ## Invitation and access management
+
 
 - Registration requires a single-use invitation code. A code has no expiry before it is consumed.
 - The first successful registration consumes the code and assigns 30 days of access.
