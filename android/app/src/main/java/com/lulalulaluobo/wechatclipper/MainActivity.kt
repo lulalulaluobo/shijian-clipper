@@ -39,6 +39,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,17 +50,26 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private var sharedUrl by mutableStateOf<String?>(null)
+    private var sharedFileUri by mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        sharedUrl = extractWechatUrl(intent?.getStringExtra(Intent.EXTRA_TEXT).orEmpty())
-        setContent { AppTheme { ClipperApp(sharedUrl) { sharedUrl = null } } }
+        val text = intent?.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        sharedUrl = extractWechatUrl(text)
+        sharedFileUri = if (sharedUrl == null && intent?.action == Intent.ACTION_SEND) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        } else null
+        setContent { AppTheme { ClipperApp(sharedUrl, sharedFileUri, { sharedUrl = null }, { sharedFileUri = null }) } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        sharedUrl = extractWechatUrl(intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty())
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        sharedUrl = extractWechatUrl(text)
+        sharedFileUri = if (sharedUrl == null && intent.action == Intent.ACTION_SEND) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        } else null
     }
 }
 
@@ -81,7 +94,12 @@ private fun AppTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ClipperApp(sharedUrl: String?, onSharedHandled: () -> Unit) {
+private fun ClipperApp(
+    sharedUrl: String?,
+    sharedFileUri: Uri?,
+    onSharedHandled: () -> Unit,
+    onSharedFileHandled: () -> Unit
+) {
     val context = LocalContext.current.applicationContext
     val store = remember(context) { SessionStore(context) }
     var session by remember { mutableStateOf(store.load()) }
@@ -117,7 +135,9 @@ private fun ClipperApp(sharedUrl: String?, onSharedHandled: () -> Unit) {
         ChatScreen(
             session = activeSession,
             sharedUrl = sharedUrl,
+            sharedFileUri = sharedFileUri,
             onSharedHandled = onSharedHandled,
+            onSharedFileHandled = onSharedFileHandled,
             onOpenSettings = { page = Page.SETTINGS },
         )
     }
@@ -186,13 +206,22 @@ private fun AuthScreen(serverUrl: String, onAuthenticated: (Session) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: () -> Unit, onOpenSettings: () -> Unit) {
+private fun ChatScreen(
+    session: Session,
+    sharedUrl: String?,
+    sharedFileUri: Uri?,
+    onSharedHandled: () -> Unit,
+    onSharedFileHandled: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
     val client = remember(session) { ApiClient(session.baseUrl, session.token) }
+    val context = LocalContext.current
     var draft by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("从微信分享文章，或粘贴公众号链接。") }
     var tasks by remember { mutableStateOf(emptyList<ClipTask>()) }
     var busy by remember { mutableStateOf(false) }
     var handledShare by remember { mutableStateOf<String?>(null) }
+    var handledShareFile by remember { mutableStateOf<Uri?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh(updateMessage: Boolean = false) {
@@ -206,6 +235,46 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
             message = error.userMessage()
         }
     }
+    
+    fun uploadFile(uri: Uri) {
+        val fileData = readUriContent(context, uri)
+        if (fileData == null) {
+            message = "读取选定文件失败。"
+            return
+        }
+        val (filename, content) = fileData
+        busy = true
+        message = "正在上传附件 $filename..."
+        scope.launch {
+            try {
+                var progressText by mutableStateOf("正在上传附件 $filename: 0%")
+                message = progressText
+                val task = withContext(Dispatchers.IO) {
+                    client.uploadAttachment(filename, content) { progress ->
+                        progressText = "正在上传附件 $filename: $progress%"
+                        message = progressText
+                    }
+                }
+                tasks = listOf(task) + tasks
+                message = "附件 $filename 上传成功。"
+                refresh()
+            } catch (error: Exception) {
+                message = error.userMessage()
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            if (uri != null) {
+                uploadFile(uri)
+            }
+        }
+    )
+
     fun submit(url: String) {
         if (extractWechatUrl(url) == null) {
             message = "仅支持 HTTPS 微信公众号文章链接。"
@@ -243,6 +312,13 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
             onSharedHandled()
         }
     }
+    LaunchedEffect(sharedFileUri, session.token) {
+        if (sharedFileUri != null && sharedFileUri != handledShareFile) {
+            handledShareFile = sharedFileUri
+            uploadFile(sharedFileUri)
+            onSharedFileHandled()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -270,7 +346,25 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
                 }) }
             }
             OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth(), label = { Text("粘贴公众号文章链接") }, minLines = 2)
-            Button(onClick = { submit(draft) }, modifier = Modifier.fillMaxWidth(), enabled = !busy) { Text(if (busy) "正在提交…" else "发送转存任务") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    modifier = Modifier.weight(1f),
+                    enabled = !busy
+                ) {
+                    Text("📎 上传附件")
+                }
+                Button(
+                    onClick = { submit(draft) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !busy
+                ) {
+                    Text(if (busy) "正在提交…" else "发送转存任务")
+                }
+            }
         }
     }
 }
@@ -282,7 +376,9 @@ private fun TaskCard(task: ClipTask, onRetry: (ClipTask) -> Unit) {
             Text(task.title.ifBlank { task.sourceUrl }, style = MaterialTheme.typography.bodyLarge)
             Text(task.statusLabel(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             if (task.errorMessage.isNotBlank()) Text(task.errorMessage, style = MaterialTheme.typography.bodySmall)
-            if (task.status == "failed") TextButton(onClick = { onRetry(task) }) { Text("重试") }
+            if (task.status == "failed" && !task.sourceUrl.startsWith("https://attachment.local/")) {
+                TextButton(onClick = { onRetry(task) }) { Text("重试") }
+            }
         }
     }
 }
@@ -510,3 +606,21 @@ private fun normalizeServerUrl(value: String): String {
 }
 
 private fun Throwable.userMessage(): String = (this as? ApiException)?.message ?: "请求失败，请检查网络和服务地址。"
+
+fun readUriContent(context: android.content.Context, uri: Uri): Pair<String, ByteArray>? {
+    val contentResolver = context.contentResolver
+    var filename = "attachment"
+    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (nameIndex != -1 && cursor.moveToFirst()) {
+            filename = cursor.getString(nameIndex)
+        }
+    }
+    return try {
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        filename to bytes
+    } catch (_: Exception) {
+        null
+    }
+}
+

@@ -1,6 +1,6 @@
 from hashlib import sha256
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -36,14 +36,16 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     @app.middleware("http")
     async def limit_requests(request: Request, call_next):
         content_length = request.headers.get("content-length")
-        if content_length and content_length.isdigit() and int(content_length) > 20_480:
-            return JSONResponse(status_code=413, content={"message": "请求体过大"})
+        if content_length and content_length.isdigit():
+            limit = 20 * 1024 * 1024 if request.url.path == "/v1/clips/attachments" else 20_480
+            if int(content_length) > limit:
+                return JSONResponse(status_code=413, content={"message": "请求体过大"})
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").rsplit(",", 1)[-1].strip()
         path = request.url.path
         if path in {"/v1/auth/login", "/v1/auth/register"}:
             key, limit, window = f"auth:{client_ip}", 10, 300
         elif request.method == "POST" and (
-            path in {"/v1/settings/fns/check", "/v1/clips"} or path.endswith("/retry")
+            path in {"/v1/settings/fns/check", "/v1/clips", "/v1/clips/attachments"} or path.endswith("/retry")
         ):
             token = request.headers.get("authorization", "")
             key, limit, window = f"work:{sha256(token.encode()).hexdigest()}", 20, 60
@@ -109,5 +111,57 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     @app.post("/v1/clips/{task_id}/retry")
     def retry_clip(task_id: str, user_id: str = Depends(require_user)):
         return service.retry_clip(user_id, task_id)
+
+    @app.post("/v1/clips/attachments", status_code=201)
+    async def upload_attachment(
+        file: UploadFile = File(...),
+        target_path: str | None = Form(default=None),
+        user_id: str = Depends(require_user),
+    ):
+        config = service.decrypt_fns_config(user_id)
+        content = await file.read()
+        
+        from backend.app.attachment_service import relay_attachment
+        from poc.fns import _safe_filename, FnsConfig
+        from pathlib import Path
+        from fastapi.concurrency import run_in_threadpool
+        
+        filename = file.filename or "attachment"
+        if target_path:
+            final_path = target_path
+        else:
+            final_path = f"{config.target_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
+            
+        target_p = Path(final_path)
+        config_for_upload = FnsConfig(
+            config.base_url,
+            config.token,
+            config.vault,
+            str(target_p.parent)
+        )
+        
+        try:
+            saved_path = await run_in_threadpool(
+                relay_attachment,
+                config_for_upload,
+                target_p.name,
+                content
+            )
+            service.record_attachment_task(user_id, filename, "succeeded", saved_path)
+            return {"path": saved_path}
+        except ClipError as error:
+            service.record_attachment_task(
+                user_id, filename, "failed", 
+                error_message=str(error), 
+                error_stage=error.stage
+            )
+            raise error
+        except Exception as error:
+            service.record_attachment_task(
+                user_id, filename, "failed", 
+                error_message="转存任务处理失败", 
+                error_stage="worker"
+            )
+            raise ClipError("worker", "转存任务处理失败") from error
 
     return app

@@ -167,6 +167,27 @@ class ClipService:
             {"status": "failed", "error_stage": error.stage, "error_message": str(error)},
         )
 
+    def record_attachment_task(
+        self,
+        user_id: str,
+        filename: str,
+        status: str,
+        path: str = "",
+        error_message: str = "",
+        error_stage: str = "",
+    ) -> dict:
+        source_url = f"https://attachment.local/{filename}"
+        body = {
+            "user": user_id,
+            "source_url": source_url,
+            "status": status,
+            "title": filename,
+            "path": path,
+            "error_stage": error_stage,
+            "error_message": error_message,
+        }
+        return self.pocketbase.create_record("clip_tasks", body)
+
     @staticmethod
     def _require_active_access(user: dict) -> None:
         expires_at = user.get("access_expires_at")

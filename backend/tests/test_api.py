@@ -48,6 +48,13 @@ class FakeService:
     def retry_clip(self, user_id, task_id):
         return {"id": task_id, "status": "queued", "user": user_id}
 
+    def decrypt_fns_config(self, user_id):
+        from poc.fns import FnsConfig
+        return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox")
+
+    def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
+        pass
+
 
 def test_create_clip_uses_authenticated_owner():
     client = TestClient(create_app(FakeService()))
@@ -145,3 +152,31 @@ def test_limits_repeated_login_attempts_from_one_client():
     response = client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"})
 
     assert response.status_code == 429
+
+
+def test_upload_attachment_success(monkeypatch):
+    class SuccessfulService(FakeService):
+        def decrypt_fns_config(self, user_id):
+            from poc.fns import FnsConfig
+            return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox")
+            
+        def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
+            assert user_id == "user-a"
+            assert filename == "report.pdf"
+            assert status == "succeeded"
+            assert path == "00_Inbox/report.pdf"
+
+    async def mock_run(func, *args, **kwargs):
+        return func(*args, **kwargs)
+    monkeypatch.setattr("fastapi.concurrency.run_in_threadpool", mock_run)
+    monkeypatch.setattr("backend.app.attachment_service.relay_attachment", lambda config, filename, content: f"{config.target_dir}/{filename}")
+
+    client = TestClient(create_app(SuccessfulService()))
+    response = client.post(
+        "/v1/clips/attachments",
+        headers={"Authorization": "Bearer token-a"},
+        files={"file": ("report.pdf", b"pdf-content", "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"path": "00_Inbox/report.pdf"}

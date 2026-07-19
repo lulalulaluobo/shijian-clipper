@@ -55,6 +55,62 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
 
     fun retryClip(taskId: String): ClipTask = taskFrom(request("POST", "/v1/clips/$taskId/retry"))
 
+    fun uploadAttachment(filename: String, content: ByteArray, onProgress: ((Int) -> Unit)? = null): ClipTask {
+        val boundary = "----ShijianAndroid" + java.util.UUID.randomUUID().toString().replace("-", "")
+        val connection = (URL(baseUrl + "/v1/clips/attachments").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 60_000
+            readTimeout = 60_000
+            doOutput = true
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            token?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        
+        val prefix = ("--$boundary\r\n" +
+                "Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n" +
+                "Content-Type: application/octet-stream\r\n\r\n").toByteArray()
+        val suffix = "\r\n--$boundary--\r\n".toByteArray()
+        
+        connection.setRequestProperty("Content-Length", (prefix.size + content.size + suffix.size).toString())
+        
+        return try {
+            connection.outputStream.use { out ->
+                out.write(prefix)
+                val bufferSize = 4096
+                var offset = 0
+                while (offset < content.size) {
+                    val length = minOf(bufferSize, content.size - offset)
+                    out.write(content, offset, length)
+                    offset += length
+                    onProgress?.invoke((offset * 100 / content.size))
+                }
+                out.write(suffix)
+                out.flush()
+            }
+            
+            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val payload = JSONObject(text.ifBlank { "{}" })
+            if (connection.responseCode !in 200..299) throw ApiException(payload.optString("message", "服务请求失败"))
+            // Mock returning a ClipTask since FNS response returns path
+            ClipTask(
+                id = java.util.UUID.randomUUID().toString(),
+                sourceUrl = "https://attachment.local/$filename",
+                status = "succeeded",
+                title = filename,
+                errorMessage = ""
+            )
+        } catch (error: ApiException) {
+            throw error
+        } catch (error: Exception) {
+            throw ApiException(error.message ?: "请求失败，请检查网络和服务地址。")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+
     private fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
         val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method

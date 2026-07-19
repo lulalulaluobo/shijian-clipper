@@ -50,4 +50,10 @@ def _safe_target_path(value: str) -> str:
 
 
 def _post_fns_attachment(url: str, headers: dict[str, str], fields: dict[str, str], file_path: Path) -> dict:
-    return request_public_multipart_file(url, headers=headers, fields=fields, file_path=file_path)
+    return request_public_multipart_file(
+        url,
+        headers=headers,
+        fields=fields,
+        file_path=file_path,
+        allow_private_addresses=True,
+    )

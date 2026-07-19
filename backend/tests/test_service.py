@@ -164,3 +164,27 @@ def test_list_and_retry_clips_are_scoped_to_authenticated_user():
     assert service.retry_clip("user-a", "task-a")["status"] == "queued"
     with pytest.raises(ApiError, match="转存任务不存在"):
         service.retry_clip("user-b", "task-a")
+
+
+def test_record_attachment_task():
+    class RecordPocketBase:
+        def __init__(self):
+            self.created = []
+
+        def create_record(self, collection, body):
+            self.created.append((collection, body))
+            return body
+
+    pocketbase = RecordPocketBase()
+    service = ClipService(pocketbase)
+    service.record_attachment_task("user-a", "report.pdf", "succeeded", "00_Inbox/report.pdf")
+
+    assert len(pocketbase.created) == 1
+    collection, body = pocketbase.created[0]
+    assert collection == "clip_tasks"
+    assert body["user"] == "user-a"
+    assert body["source_url"] == "https://attachment.local/report.pdf"
+    assert body["status"] == "succeeded"
+    assert body["title"] == "report.pdf"
+    assert body["path"] == "00_Inbox/report.pdf"
+
