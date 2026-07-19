@@ -2,7 +2,9 @@
 
 [English](README.md)
 
-拾笺由 Android 客户端与 Python 服务组成，用于将微信公众号文章经 Fast Note Sync 转存到 Obsidian。本仓库包含 Android 客户端、API、Worker、PocketBase 迁移和本地 H5 调试页。
+> ⚠️ **v0.3.0 破坏性变更**：移除了 Fast Note Sync (FNS) 集成，改用自研 Obsidian 同步插件。老用户需要：1) 卸载 FNS Service（不再需要）；2) 在 Obsidian 中安装新的同步插件。详见 [迁移指南](docs/migration-fns-to-plugin.md)。
+
+拾笺由 Android 客户端与 Python 服务组成，用于将微信公众号文章通过自研 Obsidian 同步插件转存到 Obsidian。本仓库包含 Android 客户端、API、Worker、PocketBase 迁移和本地 H5 调试页。
 
 ## Android App
 
@@ -45,7 +47,7 @@
 2. **指令：图片与文件附件转存**：
    - 新建一个快捷指令，命名为 `拾笺 附件转存`。勾选 **“在共享表单中显示”**，接受类型设为仅 **“文件”** 和 **“图像”**。
    - 添加 **“获取 URL 内容”** 操作：
-     - URL 填入：`https://<您的域名>/v1/clips/attachments`
+     - URL 填入：`https://<您的域名>/v1/clips/files`
      - 方法：`POST`
      - 头部 (Headers)：`Authorization: Bearer <您的登录Token>`
      - 请求体 (Request Body)：选择 `表单` (Form) 格式，键名 `file`，类型选择 `文件`，值设为 **“快捷指令输入”**。
@@ -99,4 +101,37 @@ python3 -m poc.server
 
 ## 部署
 
-Docker Compose、PocketBase 管理和日常维护说明见 [deploy/README.md](deploy/README.md)。若希望让 AI 代理连接 VPS 完成 Docker 与 Nginx 部署，请使用 [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md)。不要提交 `.env`、FNS token 或签名密钥。
+Docker Compose、PocketBase 管理和日常维护说明见 [deploy/README.md](deploy/README.md)。若希望让 AI 代理连接 VPS 完成 Docker 与 Nginx 部署，请使用 [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md)。不要提交 `.env`、FNS token 或签名密钥。敏感配置不写入 APK 包内；Obsidian 插件账号密码以明文存于 Vault 的插件 `data.json`。
+
+## Obsidian 同步插件
+
+拾笺从 v0.3.0 起改用自研 Obsidian 插件替代 Fast Note Sync。插件源码位于 [`obsidian-plugin/`](obsidian-plugin/) 目录。
+
+### 构建
+
+```bash
+cd obsidian-plugin
+npm install
+npm run build
+```
+
+### 安装
+
+把 `main.js`、`manifest.json` 复制到 Obsidian Vault 的 `.obsidian/plugins/shijian-sync/` 目录，然后在 Obsidian 设置的第三方插件里启用「拾笺同步」。
+
+### 配置
+
+在插件设置页填写：
+- 后端服务地址（如 `https://wechat.example.com`）
+- 注册时的邮箱和密码
+- 文章目录（默认 `公众号收藏`）
+- 附件目录（默认 `公众号收藏/assets`）
+- 轮询间隔（默认 5 秒）
+
+### 工作原理
+
+Android/iOS 客户端提交文章 URL 到后端 → Worker 抓取公众号文章转 Markdown 落库 → 插件每 5 秒轮询 `/v1/sync/changes` 拉取 → 写入 Vault 并下载图片到本地 → `POST /v1/sync/ack` 确认。
+
+### 隐私
+
+密码以明文保存在 Vault 的 `.obsidian/plugins/shijian-sync/data.json`，请确保设备安全。

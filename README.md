@@ -2,7 +2,9 @@
 
 [中文说明](README_CN.md)
 
-Shijian is an Android and Python service for capturing WeChat public-account articles into an Obsidian vault through Fast Note Sync. This repository contains the Android client, API, Worker, PocketBase migrations, and local H5 debugging PoC.
+> ⚠️ **v0.3.0 breaking change**: Fast Note Sync (FNS) integration has been removed and replaced with a self-built Obsidian sync plugin. Existing users need to: 1) uninstall the FNS Service (no longer required); 2) install the new sync plugin in Obsidian. See the [migration guide](docs/migration-fns-to-plugin.md).
+
+Shijian is an Android and Python service for capturing WeChat public-account articles into an Obsidian vault through a self-built Obsidian sync plugin. This repository contains the Android client, API, Worker, PocketBase migrations, and local H5 debugging PoC.
 
 ## Android app
 
@@ -44,7 +46,7 @@ Configure iOS Shortcuts to enable one-click sharing from WeChat or Safari:
 2. **Shortcuts: Attachment Upload**:
    - Create a Shortcut named `拾笺 附件转存`. Enable **Show in Share Sheet** for **Files** and **Images**.
    - Add action **Get Contents of URL**:
-     - URL: `https://<YOUR_DOMAIN>/v1/clips/attachments`
+     - URL: `https://<YOUR_DOMAIN>/v1/clips/files`
      - Method: `POST`
      - Headers: `Authorization: Bearer <YOUR_TOKEN>`
      - Request Body: `Form` with key `file` set as File to `Shortcut Input`.
@@ -98,4 +100,37 @@ Open `http://127.0.0.1:8765`. FNS API tokens are kept only in memory in the H5 p
 
 ## Deployment
 
-Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys.
+Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys. Sensitive configuration is not embedded in the APK; the Obsidian plugin stores its account credentials in plaintext inside the plugin `data.json` in your Vault.
+
+## Obsidian sync plugin
+
+Starting with v0.3.0, Shijian uses a self-built Obsidian plugin instead of Fast Note Sync. The plugin source lives in the [`obsidian-plugin/`](obsidian-plugin/) directory.
+
+### Build
+
+```bash
+cd obsidian-plugin
+npm install
+npm run build
+```
+
+### Install
+
+Copy `main.js` and `manifest.json` into your Obsidian Vault's `.obsidian/plugins/shijian-sync/` directory, then enable the plugin ("拾笺同步") under Obsidian's community plugins settings.
+
+### Configuration
+
+On the plugin settings page, fill in:
+- Backend service URL (e.g. `https://wechat.example.com`)
+- The email and password you registered with
+- Article folder (default `公众号收藏`)
+- Attachment folder (default `公众号收藏/assets`)
+- Polling interval (default 5 seconds)
+
+### How it works
+
+Android/iOS clients submit article URLs to the backend → the Worker fetches the WeChat article, converts it to Markdown, and stores it → the plugin polls `/v1/sync/changes` every 5 seconds → it writes the result to the Vault and downloads images locally → it confirms via `POST /v1/sync/ack`.
+
+### Privacy
+
+The password is stored in plaintext inside the Vault's `.obsidian/plugins/shijian-sync/data.json`. Keep your device secure.

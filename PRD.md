@@ -43,6 +43,7 @@
 - API 使用 HTTPS；token 仅在设置页输入并安全存储在设备端，Worker 不返回 token。
 - URL、目标路径、响应大小和请求超时都在边界处校验。
 - 文章转换和 FNS 调用必须可独立测试，失败时返回明确的阶段信息。
+- v0.3.0 起改用自研 Obsidian 同步插件（仓库内 `obsidian-plugin/`）替代 Fast Note Sync；后端不再向用户配置的 FNS 地址发起出站请求，从架构上消除 SSRF 风险（安全 review H-01）。
 
 ## 6. 里程碑
 

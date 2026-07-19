@@ -23,3 +23,28 @@
 
 - 大文件、长输出和网页内容进行过滤或程序化处理，避免将原始长日志/长网页直接载入会话。
 - 采用短输出命令和分阶段定向读取，合理控制上下文预算。
+
+## 架构（v0.3.0）
+
+拾笺 v0.3.0 起采用以下数据流：
+
+```
+Android/iOS/Web 客户端
+    ↓ POST /v1/clips (URL) 或 /v1/clips/files (附件)
+FastAPI 后端 → PocketBase 入队 clip_tasks
+    ↓ Worker 顺序消费
+公众号文章抓取 → 转 Markdown → 落 notes 表
+    ↓
+Obsidian 同步插件（每 5 秒轮询）
+    ↓ GET /v1/sync/changes
+拉取 Markdown + 图片 URL 清单
+    ↓ POST /v1/sync/ack
+确认 delivered，服务端清空附件字节
+```
+
+关键改动（相对 v0.2.x）：
+- 移除 Fast Note Sync (FNS) 集成（消除 SSRF 风险）
+- 新增 notes collection 存放待同步内容
+- 新增 /v1/sync/* API 给插件使用
+- 客户端不再配置 FNS，改为在 Obsidian 安装插件
+- 服务端不存 target_dir，目录配置完全在插件侧

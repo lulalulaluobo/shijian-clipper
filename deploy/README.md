@@ -48,5 +48,11 @@ gradle -p android :app:assembleDebug
 
 - 查看运行状态：`docker compose -f deploy/compose.yaml --env-file deploy/.env ps`
 - 查看日志：`docker compose -f deploy/compose.yaml --env-file deploy/.env logs -f api worker`
-- 用户 FNS 配置由 API 以 `FNS_ENCRYPTION_KEY` 加密保存，API 响应、任务记录和 APK 均不回显 token。
-- 首版仅允许微信公众号文章 URL，Worker 单进程顺序处理。图片保持原始 URL；不会下载或上传图片。
+- 用户不再需要服务端配置；文章由后端抓取后，等待 Obsidian 插件轮询同步到本地 Vault。
+- Worker 单进程顺序处理；图片 URL 由插件下载到本地 Vault。
+
+## Obsidian 插件同步
+
+用户在 Obsidian 中安装 `shijian-sync` 插件即可把抓取到的文章同步到本地 Vault。插件源码位于仓库的 [`obsidian-plugin/`](../obsidian-plugin/) 目录，构建后把 `main.js` 和 `manifest.json` 复制到 Obsidian Vault 的 `.obsidian/plugins/shijian-sync/` 目录，然后在 Obsidian 设置的第三方插件里启用「拾笺同步」。
+
+在插件设置页填后端服务地址、注册时的邮箱和密码，即可开始同步。插件每 5 秒轮询 `/v1/sync/changes` 拉取新内容，写入 Vault 后通过 `/v1/sync/ack` 确认。详细使用说明见仓库根目录 [README_CN.md](../README_CN.md#obsidian-同步插件)。

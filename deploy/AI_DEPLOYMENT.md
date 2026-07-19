@@ -9,7 +9,7 @@
 1. VPS 的 SSH 连接别名或主机地址，以及明确的部署目录；不要猜测服务器。
 2. 已经解析到该 VPS 公网 IP 的 API 域名，例如 `clip.example.com`。代理应以 `dig +short` 或等效方式确认解析结果包含该 VPS IP；若 DNS 尚未生效，应暂停在这里，不能代为修改 DNS。
 3. Docker 镜像仓库命名空间，以及是否允许代理推送镜像。生产环境必须使用不可变镜像标签。
-4. 新的 PocketBase 管理员邮箱、强密码和 `FNS_ENCRYPTION_KEY`。这些仅写入远程 `.env`，不得显示、提交或回传。
+4. 新的 PocketBase 管理员邮箱和强密码。这些仅写入远程 `.env`，不得显示、提交或回传。
 5. 是否需要将 PocketBase 管理界面公开到独立域名。默认不公开：PocketBase 只监听 `127.0.0.1:18081`，通过 SSH 隧道管理。若要公开，用户还必须提供一个已解析的管理域名。
 
 若用户没有提供域名，或域名尚未解析到目标 VPS，代理只能完成本地构建与远程预检，不能配置 Nginx/TLS。
@@ -58,7 +58,6 @@ docker push <registry>/shijian-pocketbase:<git-short-sha>
    POCKETBASE_IMAGE=<registry>/shijian-pocketbase:<git-short-sha>
    POCKETBASE_ADMIN_EMAIL=<secret>
    POCKETBASE_ADMIN_PASSWORD=<secret>
-   FNS_ENCRYPTION_KEY=<secret>
    ```
 
 2. 仅拉取和重建本项目服务：

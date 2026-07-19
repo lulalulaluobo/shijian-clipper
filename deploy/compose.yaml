@@ -40,7 +40,6 @@ services:
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
-      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
       WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS}
     command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
@@ -56,7 +55,6 @@ services:
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
-      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
       WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS}
     command: ["python", "-m", "backend.app.worker"]
     depends_on:
