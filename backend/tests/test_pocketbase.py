@@ -32,3 +32,35 @@ def test_login_user_uses_pocketbase_user_collection():
     assert request.full_url.endswith("/api/collections/users/auth-with-password")
     assert json.loads(request.data) == {"identity": "a@example.com", "password": "long-password"}
     assert result["token"] == "session-token"
+
+
+def _stub_opener_with_items(items):
+    """构造一个 opener mock，对 admin auth 与 records 查询返回不同响应。"""
+    responses = iter([
+        b'{"token":"admin-token"}',                       # _admin_token POST
+        json.dumps({"items": items}).encode(),            # list_records_sorted GET
+    ])
+    opener = MagicMock()
+    opener.return_value.__enter__.return_value.read.side_effect = lambda: next(responses)
+    return opener
+
+
+def test_list_records_sorted_passes_sort_and_filter_to_query():
+    items = [{"id": "n2", "created": "2026-07-19T10:00:00Z"}, {"id": "n1", "created": "2026-07-19T09:00:00Z"}]
+    opener = _stub_opener_with_items(items)
+    client = PocketBaseClient("http://pocketbase:8090", "admin@example.com", "secret", opener=opener)
+
+    result = client.list_records_sorted(
+        "notes",
+        'user = "u1" && delivered = false',
+        sort="created",
+        per_page=50,
+    )
+
+    # 第二次调用（GET records）的 Request URL 应同时含 filter、sort、perPage
+    list_request = opener.call_args_list[1].args[0]
+    full_url = list_request.full_url
+    assert "sort=created" in full_url
+    assert "perPage=50" in full_url
+    assert "delivered+%3D+false" in full_url or "delivered+False" in full_url or "delivered" in full_url
+    assert result == items

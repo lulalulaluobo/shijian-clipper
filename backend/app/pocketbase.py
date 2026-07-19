@@ -48,6 +48,19 @@ class PocketBaseClient:
         items = payload.get("items")
         return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
+    def list_records_sorted(
+        self,
+        collection: str,
+        filter_value: str,
+        sort: str = "created",
+        per_page: int = 50,
+    ) -> list[dict]:
+        """按指定字段排序查询记录，用于 notes 增量同步（按 created 升序返回最旧的未同步项）。"""
+        query = urlencode({"filter": filter_value, "sort": sort, "perPage": per_page})
+        payload = self.request("GET", f"/api/collections/{collection}/records?{query}", token=self._admin_token())
+        items = payload.get("items")
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
     def create_user(self, email: str, password: str) -> dict:
         return self.request(
             "POST",
