@@ -1,0 +1,49 @@
+name: wechat-clipper
+
+services:
+  pocketbase:
+    image: ${POCKETBASE_IMAGE}
+    restart: unless-stopped
+    environment:
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+    volumes:
+      - pocketbase_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "/pb/pocketbase", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18080:8000"
+    environment:
+      POCKETBASE_URL: http://pocketbase:8090
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
+      WORKER_POLL_INTERVAL_SECONDS: 2
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+  worker:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    environment:
+      POCKETBASE_URL: http://pocketbase:8090
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
+      WORKER_POLL_INTERVAL_SECONDS: 2
+    command: ["python", "-m", "backend.app.worker"]
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+volumes:
+  pocketbase_data:
