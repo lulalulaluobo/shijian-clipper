@@ -26,3 +26,11 @@ def test_migration_uses_pocketbase_default_users_collection():
 
     assert 'app.findCollectionByNameOrId("users")' in migration
     assert 'name: "users"' not in migration
+
+
+def test_vps_compose_keeps_backend_on_loopback_when_using_host_network():
+    compose = (ROOT / "deploy/compose.vps.yaml").read_text()
+
+    assert compose.count("network_mode: host") == 3
+    assert "--host\", \"127.0.0.1" in compose
+    assert "--http=127.0.0.1:18081" in compose
