@@ -61,6 +61,7 @@ fun extractWechatUrl(text: String): String? = Regex("https://mp\\.weixin\\.qq\\.
     .find(text)?.value?.trimEnd('.', ',', '。', '，', '!', '！', ')', '）')
 
 private enum class Page { CHAT, SETTINGS }
+const val DEFAULT_SERVER_URL = "https://wechat.lucc.fun"
 
 @Composable
 private fun AppTheme(content: @Composable () -> Unit) {
@@ -81,13 +82,16 @@ private fun ClipperApp(sharedUrl: String?, onSharedHandled: () -> Unit) {
     val context = LocalContext.current.applicationContext
     val store = remember(context) { SessionStore(context) }
     var session by remember { mutableStateOf(store.load()) }
+    var serverUrl by remember { mutableStateOf(store.loadServerUrl()) }
     var page by remember { mutableStateOf(Page.CHAT) }
     val activeSession = session
 
     if (activeSession == null) {
         AuthScreen(
+            serverUrl = serverUrl,
             onAuthenticated = {
                 store.save(it)
+                serverUrl = it.baseUrl
                 session = it
             },
         )
@@ -97,6 +101,12 @@ private fun ClipperApp(sharedUrl: String?, onSharedHandled: () -> Unit) {
             onBack = { page = Page.CHAT },
             onLogout = {
                 store.clear()
+                session = null
+            },
+            onServerChanged = {
+                store.saveServerUrl(it)
+                store.clear()
+                serverUrl = it
                 session = null
             },
         )
@@ -112,9 +122,9 @@ private fun ClipperApp(sharedUrl: String?, onSharedHandled: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AuthScreen(onAuthenticated: (Session) -> Unit) {
+private fun AuthScreen(serverUrl: String, onAuthenticated: (Session) -> Unit) {
     var isRegistering by remember { mutableStateOf(false) }
-    var serverUrl by remember { mutableStateOf("https://") }
+    var inputServerUrl by remember { mutableStateOf(serverUrl) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var inviteCode by remember { mutableStateOf("") }
@@ -129,7 +139,7 @@ private fun AuthScreen(onAuthenticated: (Session) -> Unit) {
         ) {
             Text(if (isRegistering) "使用邀请码创建账户" else "登录你的转存服务", style = MaterialTheme.typography.headlineSmall)
             Text(message, style = MaterialTheme.typography.bodyMedium)
-            OutlinedTextField(serverUrl, { serverUrl = it }, Modifier.fillMaxWidth(), label = { Text("服务地址（HTTPS）") }, singleLine = true)
+            OutlinedTextField(inputServerUrl, { inputServerUrl = it }, Modifier.fillMaxWidth(), label = { Text("服务地址（HTTPS）") }, singleLine = true)
             if (isRegistering) {
                 OutlinedTextField(inviteCode, { inviteCode = it }, Modifier.fillMaxWidth(), label = { Text("邀请码") }, singleLine = true)
             }
@@ -147,7 +157,7 @@ private fun AuthScreen(onAuthenticated: (Session) -> Unit) {
                     busy = true
                     scope.launch {
                         try {
-                            val normalizedUrl = normalizeServerUrl(serverUrl)
+                            val normalizedUrl = normalizeServerUrl(inputServerUrl)
                             val client = ApiClient(normalizedUrl)
                             val nextSession = withContext(Dispatchers.IO) {
                                 if (isRegistering) client.register(inviteCode, email, password)
@@ -266,7 +276,7 @@ private fun TaskCard(task: ClipTask, onRetry: (ClipTask) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () -> Unit) {
+private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () -> Unit, onServerChanged: (String) -> Unit) {
     val client = remember(session) { ApiClient(session.baseUrl, session.token) }
     val context = LocalContext.current
     var config by remember { mutableStateOf("") }
@@ -274,6 +284,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     var summary by remember { mutableStateOf<FnsSettings?>(null) }
     var canCreateInvites by remember { mutableStateOf(false) }
     var inviteCode by remember { mutableStateOf("") }
+    var serverUrl by remember { mutableStateOf(session.baseUrl) }
     var message by remember { mutableStateOf("保存 FNS JSON 后，令牌只保存在服务端加密存储中。") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -371,7 +382,19 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                 if (inviteCode.isNotBlank()) Text("邀请码：$inviteCode", style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(16.dp))
-            Text("服务地址：${session.baseUrl}", style = MaterialTheme.typography.bodySmall)
+            Text("服务端", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(serverUrl, { serverUrl = it }, Modifier.fillMaxWidth(), label = { Text("服务地址（HTTPS）") }, singleLine = true)
+            Button(
+                onClick = {
+                    try {
+                        onServerChanged(normalizeServerUrl(serverUrl))
+                    } catch (error: Exception) {
+                        message = error.userMessage()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy && serverUrl.trim().removeSuffix("/") != session.baseUrl,
+            ) { Text("切换服务端并重新登录") }
             TextButton(onClick = onLogout) { Text("退出登录") }
         }
     }

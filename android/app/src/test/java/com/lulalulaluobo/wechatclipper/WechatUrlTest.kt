@@ -6,6 +6,11 @@ import org.junit.Test
 
 class WechatUrlTest {
     @Test
+    fun usesGcsbBackendByDefault() {
+        assertEquals("https://wechat.lucc.fun", DEFAULT_SERVER_URL)
+    }
+
+    @Test
     fun extractsWechatArticleUrlFromSharedText() {
         assertEquals(
             "https://mp.weixin.qq.com/s/example?from=singlemessage",

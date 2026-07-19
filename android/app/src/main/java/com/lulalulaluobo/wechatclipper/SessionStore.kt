@@ -20,11 +20,17 @@ class SessionStore(context: Context) {
         return if (baseUrl.isNullOrBlank() || token.isNullOrBlank()) null else Session(baseUrl, token)
     }
 
+    fun loadServerUrl(): String = preferences.getString("base_url", DEFAULT_SERVER_URL).orEmpty().ifBlank { DEFAULT_SERVER_URL }
+
     fun save(session: Session) {
         preferences.edit().putString("base_url", session.baseUrl).putString("token", session.token).apply()
     }
 
+    fun saveServerUrl(serverUrl: String) {
+        preferences.edit().putString("base_url", serverUrl).apply()
+    }
+
     fun clear() {
-        preferences.edit().clear().apply()
+        preferences.edit().remove("token").apply()
     }
 }
