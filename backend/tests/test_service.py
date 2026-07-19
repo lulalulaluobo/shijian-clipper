@@ -65,6 +65,35 @@ def test_login_returns_pocketbase_session_without_password():
     }
 
 
+def test_create_invite_requires_authorized_user():
+    class InvitePocketBase:
+        def __init__(self, allowed):
+            self.allowed = allowed
+            self.created = None
+
+        def list_records(self, collection, filter_value, per_page=1):
+            if collection == "users" and "user-a" in filter_value:
+                return [{"id": "user-a", "can_create_invites": self.allowed}]
+            return []
+
+        def create_record(self, collection, body):
+            self.created = (collection, body)
+            return body
+
+    denied = ClipService(InvitePocketBase(False))
+    with pytest.raises(ApiError, match="没有生成邀请码权限"):
+        denied.create_invite("user-a")
+
+    pocketbase = InvitePocketBase(True)
+    created = ClipService(pocketbase).create_invite("user-a")
+
+    assert len(created["code"]) >= 24
+    assert pocketbase.created == (
+        "invite_codes",
+        {"code_hash": hashlib.sha256(created["code"].encode()).hexdigest()},
+    )
+
+
 def test_list_and_retry_clips_are_scoped_to_authenticated_user():
     class TaskPocketBase:
         task = {

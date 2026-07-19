@@ -42,6 +42,10 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
         return FnsCheck(response.optBoolean("vault_exists"), response.optBoolean("vault_checked", true))
     }
 
+    fun canCreateInvites(): Boolean = request("GET", "/v1/invites").optBoolean("can_create")
+
+    fun createInvite(): String = request("POST", "/v1/invites").requiredString("code")
+
     fun createClip(url: String): ClipTask = taskFrom(request("POST", "/v1/clips", JSONObject().put("url", url)))
 
     fun listClips(): List<ClipTask> {

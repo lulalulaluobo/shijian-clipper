@@ -268,9 +268,12 @@ private fun TaskCard(task: ClipTask, onRetry: (ClipTask) -> Unit) {
 @Composable
 private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () -> Unit) {
     val client = remember(session) { ApiClient(session.baseUrl, session.token) }
+    val context = LocalContext.current
     var config by remember { mutableStateOf("") }
     var targetDir by remember { mutableStateOf("") }
     var summary by remember { mutableStateOf<FnsSettings?>(null) }
+    var canCreateInvites by remember { mutableStateOf(false) }
+    var inviteCode by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("保存 FNS JSON 后，令牌只保存在服务端加密存储中。") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -279,6 +282,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
         try {
             summary = withContext(Dispatchers.IO) { client.getFnsSettings() }
             targetDir = summary?.targetDir.orEmpty()
+            canCreateInvites = withContext(Dispatchers.IO) { client.canCreateInvites() }
         } catch (error: Exception) {
             message = error.userMessage()
         }
@@ -334,6 +338,38 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                 enabled = summary?.configured == true && !busy,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
             ) { Text("检测连接（不写入笔记）") }
+            if (canCreateInvites) {
+                Spacer(Modifier.height(12.dp))
+                Text("成员邀请", style = MaterialTheme.typography.titleMedium)
+                Text("邀请码仅能注册一次。", style = MaterialTheme.typography.bodySmall)
+                Button(
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            try {
+                                inviteCode = withContext(Dispatchers.IO) { client.createInvite() }
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, "邀请你使用转存助手。\n服务地址：${session.baseUrl}\n邀请码：$inviteCode")
+                                        },
+                                        "分享邀请码",
+                                    ),
+                                )
+                                message = "邀请码已生成，可分享给一位新用户。"
+                            } catch (error: Exception) {
+                                message = error.userMessage()
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
+                ) { Text("生成并分享邀请码") }
+                if (inviteCode.isNotBlank()) Text("邀请码：$inviteCode", style = MaterialTheme.typography.bodyMedium)
+            }
             Spacer(Modifier.height(16.dp))
             Text("服务地址：${session.baseUrl}", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = onLogout) { Text("退出登录") }

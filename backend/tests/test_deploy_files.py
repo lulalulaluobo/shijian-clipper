@@ -28,6 +28,12 @@ def test_migration_uses_pocketbase_default_users_collection():
     assert 'name: "users"' not in migration
 
 
+def test_invite_permission_migration_adds_user_boolean_field():
+    migration = (ROOT / "deploy/pocketbase/pb_migrations/1710000001_invite_permission.js").read_text()
+
+    assert 'new BoolField({ name: "can_create_invites" })' in migration
+
+
 def test_vps_compose_keeps_backend_on_loopback_when_using_host_network():
     compose = (ROOT / "deploy/compose.vps.yaml").read_text()
 

@@ -7,6 +7,7 @@ from urllib.request import Request, urlopen
 from backend.app.crypto import decrypt_token, encrypt_token
 from backend.app.errors import ApiError
 from backend.app.fns import check_fns, parse_fns_json
+from backend.scripts.create_invite import create_invite_code
 from poc.fns import FnsConfig
 from poc.wechat import ClipError, validate_wechat_url
 
@@ -55,6 +56,19 @@ class ClipService:
         if not all(isinstance(item, str) and item for item in (token, user_id, user_email)):
             raise ApiError("登录响应无效", 502)
         return {"token": token, "user": {"id": user_id, "email": user_email}}
+
+    def can_create_invites(self, user_id: str) -> bool:
+        users = self.pocketbase.list_records("users", f'id = "{user_id}"')
+        return bool(users and users[0].get("can_create_invites"))
+
+    def create_invite(self, user_id: str) -> dict:
+        if not self.can_create_invites(user_id):
+            raise ApiError("没有生成邀请码权限", 403)
+        code = create_invite_code()
+        self.pocketbase.create_record(
+            "invite_codes", {"code_hash": hashlib.sha256(code.encode()).hexdigest()}
+        )
+        return {"code": code}
 
     def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str) -> dict:
         if not self.fns_encryption_key:

@@ -54,6 +54,14 @@ def create_app(service) -> FastAPI:
     def login(payload: LoginRequest):
         return service.login(payload.email, payload.password)
 
+    @app.get("/v1/invites")
+    def invite_permission(user_id: str = Depends(require_user)):
+        return {"can_create": service.can_create_invites(user_id)}
+
+    @app.post("/v1/invites", status_code=201)
+    def create_invite(user_id: str = Depends(require_user)):
+        return service.create_invite(user_id)
+
     @app.get("/v1/settings/fns")
     def get_fns_settings(user_id: str = Depends(require_user)):
         return service.get_fns_settings(user_id)

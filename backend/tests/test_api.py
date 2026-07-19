@@ -33,6 +33,14 @@ class FakeService:
     def check_fns_settings(self, user_id):
         return {"connected": True, "vault_exists": True}
 
+    def can_create_invites(self, user_id):
+        assert user_id == "user-a"
+        return True
+
+    def create_invite(self, user_id):
+        assert user_id == "user-a"
+        return {"code": "invite-a"}
+
     def list_clips(self, user_id):
         return {"items": [{"id": "task-a", "user": user_id, "status": "queued"}]}
 
@@ -78,6 +86,18 @@ def test_authenticated_settings_check_and_task_list():
     assert checked.json() == {"connected": True, "vault_exists": True}
     assert clips.json()["items"][0]["user"] == "user-a"
     assert retried.json()["status"] == "queued"
+
+
+def test_authorized_user_can_check_and_create_invite():
+    client = TestClient(create_app(FakeService()))
+    headers = {"Authorization": "Bearer token-a"}
+
+    allowed = client.get("/v1/invites", headers=headers)
+    created = client.post("/v1/invites", headers=headers)
+
+    assert allowed.json() == {"can_create": True}
+    assert created.status_code == 201
+    assert created.json() == {"code": "invite-a"}
 
 
 def test_invalid_token_and_fns_error_never_echo_token():
