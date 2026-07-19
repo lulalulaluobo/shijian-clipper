@@ -11,7 +11,7 @@ from typing import Callable
 from backend.app.fns_attachment import upload_staged_attachment
 from backend.app.safe_http import UnsafeUrlError, normalize_https_root_url, request_public_json
 from poc.clip import run
-from poc.fns import FnsConfig, _safe_filename
+from poc.fns import FnsConfig, _safe_filename, write_note
 from poc.wechat import ClipError, fetch_wechat_article
 
 
@@ -48,7 +48,27 @@ def run_payload(
     if not isinstance(url, str):
         raise ClipError("validate", "缺少公众号文章链接")
     config = parse_fns_config(payload.get("fns_config"), payload.get("target_dir"))
-    return run(url, config, fetch, post)
+    # poc.clip.run 已不再写 FNS；此处保留旧契约，由 server 侧调用 write_note 落库。
+    clip_result = run(url, fetch)
+    title = clip_result["title"]
+    author = clip_result["author"]
+    source_url = clip_result["source_url"]
+    markdown = clip_result["markdown"]
+    note_content = "\n".join(
+        [
+            "---",
+            f"title: {json.dumps(title, ensure_ascii=False)}",
+            f"author: {json.dumps(author, ensure_ascii=False)}",
+            f"source: {json.dumps(source_url, ensure_ascii=False)}",
+            "---",
+            "",
+            f"# {title}",
+            "",
+            markdown,
+        ]
+    )
+    path = write_note(config, title, note_content, post)
+    return {"title": title, "image_count": len(clip_result["images"]), "path": path}
 
 
 def run_attachment_payload(

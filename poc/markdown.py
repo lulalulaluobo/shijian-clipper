@@ -6,7 +6,7 @@ class _MarkdownParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
-        self.image_count = 0
+        self.images: list[str] = []
         self._href = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -30,7 +30,7 @@ class _MarkdownParser(HTMLParser):
             source = values.get("data-src") or values.get("src")
             if source:
                 self.parts.append(f"\n\n![image]({source})")
-                self.image_count += 1
+                self.images.append(source)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"strong", "b"}:
@@ -49,8 +49,8 @@ class _MarkdownParser(HTMLParser):
         self.parts.append(data)
 
 
-def html_to_markdown(content_html: str) -> tuple[str, int]:
+def html_to_markdown(content_html: str) -> tuple[str, list[str]]:
     parser = _MarkdownParser()
     parser.feed(content_html)
     markdown = re.sub(r"\n{3,}", "\n\n", "".join(parser.parts)).strip()
-    return markdown, parser.image_count
+    return markdown, parser.images

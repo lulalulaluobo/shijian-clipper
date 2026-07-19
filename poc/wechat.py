@@ -123,6 +123,12 @@ class _ArticleParser(HTMLParser):
             self.content_parts.append(value)
 
 
+def _safe_filename(title: str) -> str:
+    value = "".join(" " if char in '\\/:*?"<>|\x00' or ord(char) < 32 else char for char in title)
+    value = " ".join(value.split()).strip(". ")
+    return value[:120] or "未命名文章"
+
+
 def extract_article(source_html: str, source_url: str) -> Article:
     parser = _ArticleParser()
     parser.feed(source_html)
