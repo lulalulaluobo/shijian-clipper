@@ -1,0 +1,69 @@
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_started
+
+  pocketbase:
+    build:
+      context: ..
+      dockerfile: deploy/pocketbase/Dockerfile
+    restart: unless-stopped
+    environment:
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+    volumes:
+      - pocketbase_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "/pb/pocketbase", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      POCKETBASE_URL: http://pocketbase:8090
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS}
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      POCKETBASE_URL: http://pocketbase:8090
+      POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
+      FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
+      WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS}
+    command: ["python", "-m", "backend.app.worker"]
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pocketbase_data:
