@@ -1,4 +1,10 @@
-# 微信公众号转存 PoC
+# 微信公众号转存
+
+项目保留一个本地 H5 PoC，并提供可分发的 Android APK v1：受邀请码保护的用户通过 APK 登录，配置自己的 Fast Note Sync 后，可从微信系统分享菜单把公众号文章转存到 Obsidian。
+
+生产部署、创建邀请码和 APK 构建方式见 [deploy/README.md](deploy/README.md)。
+
+## 本地 H5 PoC
 
 启动本地 H5 调试页：
 
