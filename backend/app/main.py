@@ -8,6 +8,5 @@ settings = Settings.from_env()
 app = create_app(
     ClipService(
         PocketBaseClient(settings.pocketbase_url, settings.pocketbase_admin_email, settings.pocketbase_admin_password),
-        settings.fns_encryption_key,
     )
 )
