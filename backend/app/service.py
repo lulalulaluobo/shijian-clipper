@@ -80,7 +80,7 @@ class ClipService:
         )
         return {"code": code}
 
-    def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str, attachment_dir: str | None = None) -> dict:
+    def save_fns_settings(self, user_id: str, raw_json: str | None, target_dir: str, attachment_dir: str | None = None) -> dict:
         if not self.fns_encryption_key:
             raise ApiError("FNS 加密未配置", 500)
         if not target_dir.strip():
@@ -88,18 +88,30 @@ class ClipService:
         actual_attachment_dir = (attachment_dir or "").strip()
         if not actual_attachment_dir:
             actual_attachment_dir = target_dir.strip()
-        base_url, token, vault = parse_fns_json(raw_json)
+            
+        existing = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
+        
+        if raw_json and raw_json.strip():
+            base_url, token, vault = parse_fns_json(raw_json)
+            token_ciphertext = encrypt_token(token, self.fns_encryption_key)
+        else:
+            if not existing:
+                raise ApiError("FNS 配置 JSON 不能为空", 400)
+            base_url = existing[0]["base_url"]
+            vault = existing[0]["vault"]
+            token_ciphertext = existing[0]["token_ciphertext"]
+            
         body = {
             "user": user_id,
             "base_url": base_url,
             "vault": vault,
             "target_dir": target_dir.strip(),
             "attachment_dir": actual_attachment_dir,
-            "token_ciphertext": encrypt_token(token, self.fns_encryption_key),
+            "token_ciphertext": token_ciphertext,
         }
-        existing = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
         record = self.pocketbase.update_record("fns_settings", existing[0]["id"], body) if existing else self.pocketbase.create_record("fns_settings", body)
         return self._settings_summary(record)
+
 
     def get_fns_settings(self, user_id: str) -> dict:
         records = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')

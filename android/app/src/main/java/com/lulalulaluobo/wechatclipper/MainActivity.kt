@@ -437,7 +437,8 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
             Text("Fast Note Sync", style = MaterialTheme.typography.headlineSmall)
             Text(message, style = MaterialTheme.typography.bodyMedium)
             if (summary?.configured == true) Text("已连接至 ${summary?.vault} · ${summary?.baseUrl}", style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(config, { config = it }, Modifier.fillMaxWidth(), label = { Text("FNS API 配置 JSON") }, minLines = 5)
+            OutlinedTextField(config, { config = it }, Modifier.fillMaxWidth(), label = { Text("FNS API 配置 JSON (仅修改目录时可留空)") }, minLines = 5)
+
             OutlinedTextField(targetDir, { targetDir = it }, Modifier.fillMaxWidth(), label = { Text("微信公众号转存目录") }, singleLine = true)
             OutlinedTextField(attachmentDir, { attachmentDir = it }, Modifier.fillMaxWidth(), label = { Text("附件转存目录") }, singleLine = true)
             Button(

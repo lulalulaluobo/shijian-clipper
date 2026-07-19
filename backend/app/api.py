@@ -14,9 +14,10 @@ class ClipRequest(BaseModel):
 
 
 class FnsSettingsRequest(BaseModel):
-    config: str = Field(min_length=1, max_length=16_384)
+    config: str | None = Field(default=None, max_length=16_384)
     target_dir: str = Field(min_length=1, max_length=512)
     attachment_dir: str | None = Field(default=None, max_length=512)
+
 
 
 class RegisterRequest(BaseModel):
