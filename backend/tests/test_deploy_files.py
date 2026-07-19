@@ -34,6 +34,13 @@ def test_invite_permission_migration_adds_user_boolean_field():
     assert 'new BoolField({ name: "can_create_invites" })' in migration
 
 
+def test_access_expiry_migration_adds_invite_code_and_user_expiry_fields():
+    migration = (ROOT / "deploy/pocketbase/pb_migrations/1710000002_user_access_expiry.js").read_text()
+
+    assert 'new TextField({ name: "code"' in migration
+    assert 'new DateField({ name: "access_expires_at" })' in migration
+
+
 def test_vps_compose_keeps_backend_on_loopback_when_using_host_network():
     compose = (ROOT / "deploy/compose.vps.yaml").read_text()
 

@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 from urllib.request import Request, urlopen
 
@@ -35,6 +35,11 @@ class ClipService:
                 raise ApiError("用户创建失败", 502)
             try:
                 self.pocketbase.update_record(
+                    "users",
+                    user_id,
+                    {"access_expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat().replace("+00:00", "Z")},
+                )
+                self.pocketbase.update_record(
                     "invite_codes",
                     invitations[0]["id"],
                     {"used_by": user_id, "used_at": datetime.now(UTC).isoformat()},
@@ -45,7 +50,12 @@ class ClipService:
         return {"id": user_id, "email": user_email}
 
     def current_user(self, token: str) -> str:
-        return self.pocketbase.authenticate_user(token)
+        user_id = self.pocketbase.authenticate_user(token)
+        users = self.pocketbase.list_records("users", f'id = "{user_id}"')
+        if not users:
+            raise ApiError("用户不存在", 401)
+        self._require_active_access(users[0])
+        return user_id
 
     def login(self, email: str, password: str) -> dict:
         payload = self.pocketbase.login_user(email.strip(), password)
@@ -55,6 +65,7 @@ class ClipService:
         user_email = record.get("email") if isinstance(record, dict) else None
         if not all(isinstance(item, str) and item for item in (token, user_id, user_email)):
             raise ApiError("登录响应无效", 502)
+        self._require_active_access(record)
         return {"token": token, "user": {"id": user_id, "email": user_email}}
 
     def can_create_invites(self, user_id: str) -> bool:
@@ -66,7 +77,7 @@ class ClipService:
             raise ApiError("没有生成邀请码权限", 403)
         code = create_invite_code()
         self.pocketbase.create_record(
-            "invite_codes", {"code_hash": hashlib.sha256(code.encode()).hexdigest()}
+            "invite_codes", {"code": code, "code_hash": hashlib.sha256(code.encode()).hexdigest()}
         )
         return {"code": code}
 
@@ -156,6 +167,20 @@ class ClipService:
             task_id,
             {"status": "failed", "error_stage": error.stage, "error_message": str(error)},
         )
+
+    @staticmethod
+    def _require_active_access(user: dict) -> None:
+        expires_at = user.get("access_expires_at")
+        if not isinstance(expires_at, str) or not expires_at:
+            raise ApiError("使用期限已到，请联系管理员续期", 403)
+        try:
+            expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ApiError("使用期限已到，请联系管理员续期", 403) from error
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if expiry <= datetime.now(UTC):
+            raise ApiError("使用期限已到，请联系管理员续期", 403)
 
     @staticmethod
     def _settings_summary(record: dict) -> dict:

@@ -1,4 +1,5 @@
 import hashlib
+from datetime import UTC, datetime
 
 import pytest
 
@@ -10,8 +11,11 @@ class FakePocketBase:
         self.code_hash = hashlib.sha256(b"invite-code").hexdigest()
         self.invites = {"invite-record": {"id": "invite-record", "code_hash": self.code_hash, "used_by": ""}}
         self.users = {}
+        self.auth_users = {"user-a": {"id": "user-a", "access_expires_at": "2999-01-01 00:00:00Z"}}
 
     def list_records(self, collection, filter_value):
+        if collection == "users" and "user-a" in filter_value:
+            return [self.auth_users["user-a"]]
         if collection != "invite_codes" or self.code_hash not in filter_value:
             return []
         return [invite for invite in self.invites.values() if not invite["used_by"]]
@@ -22,7 +26,7 @@ class FakePocketBase:
         return user
 
     def update_record(self, collection, record_id, body):
-        self.invites[record_id].update(body)
+        (self.users if collection == "users" else self.invites)[record_id].update(body)
 
     def delete_record(self, collection, record_id):
         self.users.pop(record_id, None)
@@ -35,7 +39,7 @@ class FakePocketBase:
     def login_user(self, email, password):
         if email != "a@example.com" or password != "long-password":
             raise ApiError("邮箱或密码错误", 401)
-        return {"token": "session-token", "record": {"id": "user-a", "email": email}}
+        return {"token": "session-token", "record": {"id": "user-a", "email": email, "access_expires_at": "2999-01-01 00:00:00Z"}}
 
 
 def test_register_consumes_matching_invite_once():
@@ -90,8 +94,45 @@ def test_create_invite_requires_authorized_user():
     assert len(created["code"]) >= 24
     assert pocketbase.created == (
         "invite_codes",
-        {"code_hash": hashlib.sha256(created["code"].encode()).hexdigest()},
+        {"code": created["code"], "code_hash": hashlib.sha256(created["code"].encode()).hexdigest()},
     )
+
+
+def test_register_assigns_thirty_day_access_to_invited_user():
+    class RegistrationPocketBase:
+        def __init__(self):
+            self.invite = {"id": "invite-a", "code_hash": hashlib.sha256(b"invite-code").hexdigest(), "used_by": ""}
+            self.updates = []
+
+        def list_records(self, collection, filter_value, per_page=1):
+            return [self.invite] if collection == "invite_codes" else []
+
+        def create_user(self, email, password):
+            return {"id": "user-a", "email": email}
+
+        def update_record(self, collection, record_id, body):
+            self.updates.append((collection, record_id, body))
+
+        def delete_record(self, collection, record_id):
+            raise AssertionError("registration should not be rolled back")
+
+    pocketbase = RegistrationPocketBase()
+    ClipService(pocketbase).register("invite-code", "a@example.com", "long-password")
+
+    expiry = next(body["access_expires_at"] for collection, _, body in pocketbase.updates if collection == "users")
+    assert datetime.fromisoformat(expiry.replace("Z", "+00:00")) > datetime.now(UTC)
+
+
+def test_current_user_rejects_expired_access():
+    class ExpiredPocketBase:
+        def authenticate_user(self, token):
+            return "user-a"
+
+        def list_records(self, collection, filter_value, per_page=1):
+            return [{"id": "user-a", "access_expires_at": "2000-01-01 00:00:00Z"}]
+
+    with pytest.raises(ApiError, match="使用期限已到"):
+        ClipService(ExpiredPocketBase()).current_user("valid-token")
 
 
 def test_list_and_retry_clips_are_scoped_to_authenticated_user():
