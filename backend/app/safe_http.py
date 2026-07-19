@@ -1,7 +1,9 @@
 import ipaddress
 import json
 import socket
+import uuid
 from http.client import HTTPSConnection
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -99,6 +101,68 @@ def request_public_text(
         raise ValueError("远程服务响应不是 UTF-8") from error
 
 
+def request_public_multipart_file(
+    url: str,
+    *,
+    headers: dict[str, str],
+    fields: dict[str, str],
+    file_path: Path,
+    timeout: int = 30,
+    expected_host: str | None = None,
+    allow_private_addresses: bool = False,
+) -> dict:
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port or 443
+    except ValueError as error:
+        raise UnsafeUrlError("只允许访问公网 HTTPS 地址") from error
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+        raise UnsafeUrlError("只允许访问公网 HTTPS 地址")
+    if not file_path.is_file():
+        raise ValueError("附件暂存文件不存在")
+    host = parsed.hostname.lower()
+    if expected_host is not None and host != expected_host:
+        raise UnsafeUrlError("远程地址不受允许")
+    address = _resolve_public_address(host, port, socket.getaddrinfo, allow_private_addresses)
+    boundary = f"----Shijian{uuid.uuid4().hex}"
+    prefix = b"".join(
+        _multipart_field(boundary, name, value)
+        for name, value in fields.items()
+    ) + _multipart_file_header(boundary, file_path.name)
+    suffix = f"\r\n--{boundary}--\r\n".encode()
+    request_headers = dict(headers)
+    request_headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+    request_headers["Content-Length"] = str(len(prefix) + file_path.stat().st_size + len(suffix))
+    path = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+
+    connection = _PinnedHttpsConnection(host, port, address, timeout)
+    try:
+        connection.putrequest("POST", path)
+        for name, value in request_headers.items():
+            connection.putheader(name, value)
+        connection.endheaders()
+        connection.send(prefix)
+        with file_path.open("rb") as file:
+            while chunk := file.read(64 * 1024):
+                connection.send(chunk)
+        connection.send(suffix)
+        response = connection.getresponse()
+        content = response.read(MAX_RESPONSE_BYTES + 1)
+    finally:
+        connection.close()
+    if not 200 <= response.status < 300:
+        raise ValueError("远程服务响应失败")
+    if len(content) > MAX_RESPONSE_BYTES:
+        raise ValueError("远程服务响应过大")
+    try:
+        value = json.loads(content.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("远程服务响应不是 JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError("远程服务响应无效")
+    return value
+
+
 def request_public_bytes(
     url: str,
     *,
@@ -138,6 +202,15 @@ def request_public_bytes(
     if len(content) > MAX_RESPONSE_BYTES:
         raise ValueError("远程服务响应过大")
     return content
+
+
+def _multipart_field(boundary: str, name: str, value: str) -> bytes:
+    return f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+
+
+def _multipart_file_header(boundary: str, filename: str) -> bytes:
+    safe_name = filename.replace("\r", "").replace("\n", "").replace('"', "")
+    return f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{safe_name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
 
 
 def _resolve_public_address(host: str, port: int, resolver, allow_private_addresses: bool = False) -> str:
