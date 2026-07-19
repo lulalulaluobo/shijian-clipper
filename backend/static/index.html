@@ -494,27 +494,12 @@
     </div>
     <div class="settings-content">
       
-      <!-- FNS CONFIG CARD -->
+      <!-- OBSIDIAN SYNC CARD -->
       <div class="card">
-        <h3 class="card-title">Fast Note Sync 配置</h3>
-        <form onsubmit="handleSaveSettings(event)">
-          <div class="form-group">
-            <label for="fns-json">FNS API 配置 JSON (仅修改目录时可留空)</label>
-            <textarea id="fns-json" placeholder='{"api": "https://obsync.example.com", "apiToken": "...", "vault": "..."}'></textarea>
-          </div>
-          <div class="form-group">
-            <label for="fns-target-dir">微信公众号转存目录</label>
-            <input type="text" id="fns-target-dir" required>
-          </div>
-          <div class="form-group">
-            <label for="fns-attachment-dir">附件转存目录</label>
-            <input type="text" id="fns-attachment-dir" required>
-          </div>
-          <div style="display:flex; gap:12px; margin-top:16px;">
-            <button type="submit" class="btn">保存配置</button>
-            <button type="button" class="btn btn-secondary" onclick="checkConnection()">检测连接</button>
-          </div>
-        </form>
+        <h3 class="card-title">Obsidian 同步</h3>
+        <p style="font-size:0.85rem; color:var(--muted); margin:0;">
+          文章将在服务端抓取后自动同步到你的 Obsidian 仓库。请在 Obsidian 桌面或移动端安装「拾笺同步」插件，并使用本服务账号登录。
+        </p>
       </div>
 
       <!-- MEMBER INVITE CARD -->
@@ -634,26 +619,10 @@
     }
 
     function onAuthenticated() {
-      fetchSettings();
       fetchClips();
       checkInvitePermission();
       if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(fetchClips, 5000);
-    }
-
-    async function fetchSettings() {
-      try {
-        const res = await fetch("/v1/settings/fns", {
-          headers: { "Authorization": `Bearer ${TOKEN}` }
-        });
-        if (res.status === 401) return handleLogout();
-        const data = await res.json();
-        if (res.ok) {
-          document.getElementById("fns-json").value = ""; // Always leave empty for privacy/optional modify
-          document.getElementById("fns-target-dir").value = data.target_dir || "";
-          document.getElementById("fns-attachment-dir").value = data.attachment_dir || "";
-        }
-      } catch (err) {}
     }
 
     async function checkInvitePermission() {
@@ -668,50 +637,6 @@
           document.getElementById("invite-card").style.display = "none";
         }
       } catch (err) {}
-    }
-
-    async function handleSaveSettings(e) {
-      e.preventDefault();
-      const config = document.getElementById("fns-json").value.trim() || null;
-      const targetDir = document.getElementById("fns-target-dir").value.trim();
-      const attachmentDir = document.getElementById("fns-attachment-dir").value.trim();
-
-      try {
-        const res = await fetch("/v1/settings/fns", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${TOKEN}`
-          },
-          body: JSON.stringify({ config, target_dir: targetDir, attachment_dir: attachmentDir })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          showToast("配置保存成功！");
-          fetchSettings();
-        } else {
-          showToast(data.message || "保存配置失败");
-        }
-      } catch (err) {
-        showToast("网络请求失败");
-      }
-    }
-
-    async function checkConnection() {
-      try {
-        const res = await fetch("/v1/settings/fns/check", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${TOKEN}` }
-        });
-        const data = await res.json();
-        if (res.ok) {
-          showToast("连接测试成功！Obsidian 服务连通");
-        } else {
-          showToast(data.message || "连接测试失败");
-        }
-      } catch (err) {
-        showToast("网络请求失败");
-      }
     }
 
     async function generateInviteCode() {
@@ -785,7 +710,7 @@
       progressText.innerText = "0%";
 
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/v1/clips/attachments", true);
+      xhr.open("POST", "/v1/clips/files", true);
       xhr.setRequestHeader("Authorization", `Bearer ${TOKEN}`);
 
       xhr.upload.onprogress = (e) => {
@@ -800,7 +725,12 @@
         progressContainer.style.display = "none";
         document.getElementById("file-input").value = "";
         if (xhr.status === 201) {
-          showToast("文件上传转存成功！");
+          try {
+            const data = JSON.parse(xhr.responseText);
+            showToast(`${data.filename} 已上传，等待 Obsidian 同步`);
+          } catch (err) {
+            showToast("文件已上传，等待 Obsidian 同步");
+          }
           fetchClips();
         } else {
           try {
