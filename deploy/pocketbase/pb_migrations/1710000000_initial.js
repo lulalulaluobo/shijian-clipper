@@ -1,16 +1,5 @@
 migrate((app) => {
-  const users = new Collection({
-    id: "users0000000001",
-    type: "auth",
-    name: "users",
-    listRule: null,
-    viewRule: null,
-    createRule: null,
-    updateRule: null,
-    deleteRule: null,
-    passwordAuth: { enabled: true },
-  })
-  app.save(users)
+  const users = app.findCollectionByNameOrId("users")
 
   const inviteCodes = new Collection({
     id: "invite000000001",
@@ -63,5 +52,5 @@ migrate((app) => {
   admin.set("password", $os.getenv("POCKETBASE_ADMIN_PASSWORD"))
   app.save(admin)
 }, (app) => {
-  ;["clip_tasks", "fns_settings", "invite_codes", "users"].forEach((name) => app.delete(app.findCollectionByNameOrId(name)))
+  ;["clip_tasks", "fns_settings", "invite_codes"].forEach((name) => app.delete(app.findCollectionByNameOrId(name)))
 })

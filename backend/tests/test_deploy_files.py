@@ -19,3 +19,10 @@ def test_env_example_contains_only_secret_placeholders():
 
     assert "change-me" in text
     assert "apiToken" not in text
+
+
+def test_migration_uses_pocketbase_default_users_collection():
+    migration = (ROOT / "deploy/pocketbase/pb_migrations/1710000000_initial.js").read_text()
+
+    assert 'app.findCollectionByNameOrId("users")' in migration
+    assert 'name: "users"' not in migration
