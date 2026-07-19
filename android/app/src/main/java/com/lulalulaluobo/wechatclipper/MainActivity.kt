@@ -390,6 +390,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     val context = LocalContext.current
     var config by remember { mutableStateOf("") }
     var targetDir by remember { mutableStateOf("") }
+    var attachmentDir by remember { mutableStateOf("") }
     var summary by remember { mutableStateOf<FnsSettings?>(null) }
     var canCreateInvites by remember { mutableStateOf(false) }
     var inviteCode by remember { mutableStateOf("") }
@@ -420,6 +421,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
         try {
             summary = withContext(Dispatchers.IO) { client.getFnsSettings() }
             targetDir = summary?.targetDir.orEmpty()
+            attachmentDir = summary?.attachmentDir.orEmpty()
             canCreateInvites = withContext(Dispatchers.IO) { client.canCreateInvites() }
         } catch (error: Exception) {
             message = error.userMessage()
@@ -436,13 +438,14 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
             Text(message, style = MaterialTheme.typography.bodyMedium)
             if (summary?.configured == true) Text("已连接至 ${summary?.vault} · ${summary?.baseUrl}", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(config, { config = it }, Modifier.fillMaxWidth(), label = { Text("FNS API 配置 JSON") }, minLines = 5)
-            OutlinedTextField(targetDir, { targetDir = it }, Modifier.fillMaxWidth(), label = { Text("Obsidian 目标目录") }, singleLine = true)
+            OutlinedTextField(targetDir, { targetDir = it }, Modifier.fillMaxWidth(), label = { Text("微信公众号转存目录") }, singleLine = true)
+            OutlinedTextField(attachmentDir, { attachmentDir = it }, Modifier.fillMaxWidth(), label = { Text("附件转存目录") }, singleLine = true)
             Button(
                 onClick = {
                     busy = true
                     scope.launch {
                         try {
-                            summary = withContext(Dispatchers.IO) { client.saveFnsSettings(config, targetDir) }
+                            summary = withContext(Dispatchers.IO) { client.saveFnsSettings(config, targetDir, attachmentDir) }
                             config = ""
                             message = "已安全保存配置。"
                         } catch (error: Exception) {
@@ -468,6 +471,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                             }
                         } catch (error: Exception) {
                             message = error.userMessage()
+
                         } finally {
                             busy = false
                         }

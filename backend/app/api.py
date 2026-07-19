@@ -16,6 +16,7 @@ class ClipRequest(BaseModel):
 class FnsSettingsRequest(BaseModel):
     config: str = Field(min_length=1, max_length=16_384)
     target_dir: str = Field(min_length=1, max_length=512)
+    attachment_dir: str | None = Field(default=None, max_length=512)
 
 
 class RegisterRequest(BaseModel):
@@ -94,7 +95,8 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
 
     @app.put("/v1/settings/fns")
     def save_fns_settings(payload: FnsSettingsRequest, user_id: str = Depends(require_user)):
-        return service.save_fns_settings(user_id, payload.config, payload.target_dir)
+        return service.save_fns_settings(user_id, payload.config, payload.target_dir, payload.attachment_dir)
+
 
     @app.post("/v1/settings/fns/check")
     def check_fns_settings(user_id: str = Depends(require_user)):
@@ -130,7 +132,8 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
         if target_path:
             final_path = target_path
         else:
-            final_path = f"{config.target_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
+            final_path = f"{config.attachment_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
+
             
         target_p = Path(final_path)
         config_for_upload = FnsConfig(

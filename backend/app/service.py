@@ -80,17 +80,21 @@ class ClipService:
         )
         return {"code": code}
 
-    def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str) -> dict:
+    def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str, attachment_dir: str | None = None) -> dict:
         if not self.fns_encryption_key:
             raise ApiError("FNS 加密未配置", 500)
         if not target_dir.strip():
             raise ApiError("目标目录不能为空", 400)
+        actual_attachment_dir = (attachment_dir or "").strip()
+        if not actual_attachment_dir:
+            actual_attachment_dir = target_dir.strip()
         base_url, token, vault = parse_fns_json(raw_json)
         body = {
             "user": user_id,
             "base_url": base_url,
             "vault": vault,
             "target_dir": target_dir.strip(),
+            "attachment_dir": actual_attachment_dir,
             "token_ciphertext": encrypt_token(token, self.fns_encryption_key),
         }
         existing = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
@@ -151,6 +155,7 @@ class ClipService:
             decrypt_token(record["token_ciphertext"], self.fns_encryption_key),
             record["vault"],
             record["target_dir"],
+            record.get("attachment_dir") or record["target_dir"],
         )
 
     def finish_task(self, task_id: str, result: dict) -> None:
@@ -209,8 +214,10 @@ class ClipService:
             "base_url": record["base_url"],
             "vault": record["vault"],
             "target_dir": record["target_dir"],
+            "attachment_dir": record.get("attachment_dir") or record["target_dir"],
             "token_saved": bool(record.get("token_ciphertext")),
         }
+
 
     @staticmethod
     def _task_summary(task: dict) -> dict:

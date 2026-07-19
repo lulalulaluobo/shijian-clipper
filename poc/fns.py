@@ -11,6 +11,8 @@ class FnsConfig:
     token: str
     vault: str
     target_dir: str
+    attachment_dir: str = ""
+
 
 
 def write_note(

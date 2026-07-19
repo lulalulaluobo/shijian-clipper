@@ -50,7 +50,7 @@ class FakeService:
 
     def decrypt_fns_config(self, user_id):
         from poc.fns import FnsConfig
-        return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox")
+        return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox", "00_Inbox")
 
     def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
         pass
@@ -158,7 +158,8 @@ def test_upload_attachment_success(monkeypatch):
     class SuccessfulService(FakeService):
         def decrypt_fns_config(self, user_id):
             from poc.fns import FnsConfig
-            return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox")
+            return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox", "00_Inbox")
+
             
         def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
             assert user_id == "user-a"

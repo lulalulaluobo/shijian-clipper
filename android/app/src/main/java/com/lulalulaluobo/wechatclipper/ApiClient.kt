@@ -6,7 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class Session(val baseUrl: String, val token: String)
-data class FnsSettings(val configured: Boolean, val baseUrl: String, val vault: String, val targetDir: String)
+data class FnsSettings(val configured: Boolean, val baseUrl: String, val vault: String, val targetDir: String, val attachmentDir: String)
 data class FnsCheck(val vaultExists: Boolean, val vaultChecked: Boolean)
 data class ClipTask(val id: String, val sourceUrl: String, val status: String, val title: String, val errorMessage: String)
 
@@ -29,13 +29,15 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
             baseUrl = response.optString("base_url"),
             vault = response.optString("vault"),
             targetDir = response.optString("target_dir"),
+            attachmentDir = response.optString("attachment_dir"),
         )
     }
 
-    fun saveFnsSettings(config: String, targetDir: String): FnsSettings {
-        val response = request("PUT", "/v1/settings/fns", JSONObject().put("config", config).put("target_dir", targetDir))
-        return FnsSettings(true, response.optString("base_url"), response.optString("vault"), response.optString("target_dir"))
+    fun saveFnsSettings(config: String, targetDir: String, attachmentDir: String): FnsSettings {
+        val response = request("PUT", "/v1/settings/fns", JSONObject().put("config", config).put("target_dir", targetDir).put("attachment_dir", attachmentDir))
+        return FnsSettings(true, response.optString("base_url"), response.optString("vault"), response.optString("target_dir"), response.optString("attachment_dir"))
     }
+
 
     fun checkFnsSettings(): FnsCheck {
         val response = request("POST", "/v1/settings/fns/check")
