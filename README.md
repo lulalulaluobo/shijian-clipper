@@ -12,7 +12,7 @@ Shijian is an Android and Python service for capturing WeChat public-account art
 - Default service: `https://wechat.fun` (or your custom deployment)
 - Self-hosting: change the service URL from Settings, then sign in again.
 - Input: share a WeChat public-account article (text URL) or **share any file / image** from the system share sheet, or paste its HTTPS URL / upload from Chat interface.
-- Output: WeChat articles are written to the **WeChat Article folder**, and attachments (images, PDFs, documents) are saved to the **Attachment folder** configured in Settings. Both destinations reside in your self-hosted Fast Note Sync vault.
+- Output: WeChat articles are written to the **WeChat Article folder**, and attachments (images, PDFs, documents) are saved to the **Attachment folder** configured in the Obsidian sync plugin. Both destinations reside in your Obsidian vault.
 - About: Settings shows the installed version and GitHub repository. It checks the latest GitHub Release, highlights a newer version, verifies its SHA-256 and signing certificate, then hands installation to Android for user confirmation.
 
 ### Screenshots

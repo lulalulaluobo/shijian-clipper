@@ -125,4 +125,4 @@ docker compose -f compose.vps.yaml --env-file .env exec api python -m backend.sc
 - 回滚镜像：<部署前的 tag，首次部署则写“无”>
 ```
 
-报告还应简述常用管理功能：在 `users` 查看用户、编辑 `access_expires_at` 延长使用期限、勾选 `can_create_invites` 授予生成邀请码权限；在 `clip_tasks` 查看转存状态和错误；在 `fns_settings` 仅检查配置摘要，不导出 token。管理员密码不应出现在报告、Git、日志或普通部署回显中；首个邀请码仅在这份面向用户的最终报告显示一次；FNS token、SSH 私钥和完整 `.env` 永远不得输出。
+报告还应简述常用管理功能：在 `users` 查看用户、编辑 `access_expires_at` 延长使用期限、勾选 `can_create_invites` 授予生成邀请码权限；在 `clip_tasks` 查看抓取状态和错误；在 `notes` 查看待同步/已同步内容。管理员密码不应出现在报告、Git、日志或普通部署回显中；首个邀请码仅在这份面向用户的最终报告显示一次；SSH 私钥和完整 `.env` 永远不得输出。

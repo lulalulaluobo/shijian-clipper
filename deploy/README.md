@@ -6,13 +6,7 @@
 
 1. 给 VPS 配置一个域名 A/AAAA 记录，并放行 TCP 80、443。
 2. 在仓库根目录复制配置：`cp deploy/.env.example deploy/.env`。
-3. 在 `deploy/.env` 填写 `DOMAIN`、一个新的管理员邮箱/长密码，并生成 Fernet 密钥：
-
-   ```sh
-   python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-   ```
-
-   将输出填入 `FNS_ENCRYPTION_KEY`。这个值丢失后，已保存的 FNS token 无法解密；请备份到密码管理器。
+3. 在 `deploy/.env` 填写 `DOMAIN` 和一个新的 PocketBase 管理员邮箱/长密码。
 4. 启动服务：`docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build`。
 5. 等待 Caddy 签发证书后访问 `https://你的域名/healthz`，应得到 `{"status":"ok"}`。
 
