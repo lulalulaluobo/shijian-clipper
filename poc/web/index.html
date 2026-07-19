@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>公众号转存 / 本地调试台</title>
+  <style>
+    :root {
+      --ink: #1c211d;
+      --paper: #f5f1e8;
+      --line: #c9c2b5;
+      --leaf: #2f6249;
+      --alert: #b54b32;
+      --muted: #6b7069;
+      --panel: #fffdf7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }
+
+    main {
+      width: min(880px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 52px 0 72px;
+    }
+
+    .eyebrow, label, button, .status-label, .field-note {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow { color: var(--leaf); font-size: .75rem; font-weight: 700; }
+    h1 { font-size: clamp(2.35rem, 7vw, 4.6rem); line-height: .92; margin: 16px 0; max-width: 680px; }
+    .lede { color: var(--muted); font-size: 1.1rem; line-height: 1.6; max-width: 640px; margin: 0 0 34px; }
+
+    form, #result {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: 8px 8px 0 rgba(28, 33, 29, .08);
+    }
+
+    form { padding: clamp(20px, 4vw, 34px); }
+    .section { padding: 20px 0; border-top: 1px solid var(--line); }
+    .section:first-child { padding-top: 0; border-top: 0; }
+
+    label { display: block; font-size: .72rem; font-weight: 700; margin-bottom: 9px; }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      padding: 13px 14px;
+      color: var(--ink);
+      background: #fff;
+      font: 1rem/1.5 "SFMono-Regular", Consolas, monospace;
+    }
+    textarea { min-height: 150px; resize: vertical; }
+    input:focus, textarea:focus { outline: 3px solid #b8d7c5; outline-offset: 2px; }
+    .field-note { color: var(--muted); font-size: .68rem; line-height: 1.5; margin: 9px 0 0; }
+
+    .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+    button {
+      width: 100%;
+      border: 0;
+      padding: 16px 20px;
+      color: #fff;
+      background: var(--leaf);
+      cursor: pointer;
+      font-weight: 700;
+      transition: transform .15s ease, background .15s ease;
+    }
+    button:hover { background: #244e3a; transform: translate(-2px, -2px); }
+    button:disabled { background: #8b938c; cursor: wait; transform: none; }
+
+    #result { display: none; margin-top: 28px; padding: 22px 24px; }
+    #result.visible { display: block; }
+    #result.success { border-left: 6px solid var(--leaf); }
+    #result.error { border-left: 6px solid var(--alert); }
+    .status-label { font-size: .7rem; font-weight: 700; color: var(--muted); }
+    #result-message { margin: 8px 0 0; line-height: 1.6; white-space: pre-wrap; }
+
+    @media (max-width: 600px) {
+      main { padding-top: 32px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Local / FNS Debugger</div>
+    <h1>把一篇公众号文章，送进你的笔记库。</h1>
+    <p class="lede">粘贴 Fast Note Sync 管理面板复制的 API 配置。配置只用于当前一次请求，刷新页面后不会保留。</p>
+
+    <form id="clip-form" autocomplete="off">
+      <section class="section">
+        <label for="fns-config">FNS API 配置 JSON</label>
+        <textarea id="fns-config" required spellcheck="false" autocapitalize="off" placeholder='{"api":"https://sync.example.com","apiToken":"…","vault":"MyVault"}'></textarea>
+        <p class="field-note">读取 api、apiToken、vault；wsApi 不参与本次写入。</p>
+      </section>
+
+      <section class="section">
+        <label for="article-url">微信公众号文章链接</label>
+        <input id="article-url" type="url" required inputmode="url" autocapitalize="off" placeholder="https://mp.weixin.qq.com/s/...">
+      </section>
+
+      <section class="section grid">
+        <div>
+          <label for="target-dir">目标目录</label>
+          <input id="target-dir" required value="00_Inbox/微信公众号">
+        </div>
+        <div style="align-self:end">
+          <button id="submit-button" type="submit">开始转存</button>
+        </div>
+      </section>
+    </form>
+
+    <section id="result" aria-live="polite" aria-atomic="true">
+      <div id="result-label" class="status-label"></div>
+      <p id="result-message"></p>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("clip-form");
+    const configInput = document.getElementById("fns-config");
+    const urlInput = document.getElementById("article-url");
+    const directoryInput = document.getElementById("target-dir");
+    const submitButton = document.getElementById("submit-button");
+    const result = document.getElementById("result");
+    const resultLabel = document.getElementById("result-label");
+    const resultMessage = document.getElementById("result-message");
+
+    function showResult(kind, label, message) {
+      result.className = `visible ${kind}`;
+      resultLabel.textContent = label;
+      resultMessage.textContent = message;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      let fnsConfig;
+      try {
+        fnsConfig = JSON.parse(configInput.value);
+        if (!fnsConfig.api || !fnsConfig.apiToken || !fnsConfig.vault) {
+          throw new Error("配置中需要 api、apiToken 和 vault 字段。");
+        }
+      } catch (error) {
+        showResult("error", "配置错误", error.message || "FNS 配置不是有效 JSON。");
+        return;
+      }
+
+      submitButton.disabled = true;
+      submitButton.textContent = "正在处理…";
+      showResult("success", "处理中", "抓取文章、转换 Markdown 并写入 Fast Note Sync。");
+      try {
+        const response = await fetch("/api/clip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: urlInput.value,
+            target_dir: directoryInput.value,
+            fns_config: fnsConfig,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(`[${payload.stage || "request"}] ${payload.message || "转存失败"}`);
+        }
+        showResult("success", "已写入", `${payload.title}\n${payload.path}\n图片：${payload.image_count} 张（保留原链接）`);
+      } catch (error) {
+        showResult("error", "转存失败", error.message || "请求失败，请检查本地服务和网络。");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "开始转存";
+      }
+    });
+  </script>
+</body>
+</html>
