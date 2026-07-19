@@ -5,6 +5,7 @@ node_modules/
 dist/
 references/
 .worktrees/
+__pycache__/
 *.db-shm
 *.db-wal
 *.log
