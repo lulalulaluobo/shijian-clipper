@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.app.errors import ApiError
 from poc.wechat import ClipError
@@ -13,6 +13,17 @@ class ClipRequest(BaseModel):
 class FnsSettingsRequest(BaseModel):
     config: str
     target_dir: str
+
+
+class RegisterRequest(BaseModel):
+    invite_code: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=8)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=1)
 
 
 def create_app(service) -> FastAPI:
@@ -35,6 +46,14 @@ def create_app(service) -> FastAPI:
     def healthz():
         return {"status": "ok"}
 
+    @app.post("/v1/auth/register", status_code=201)
+    def register(payload: RegisterRequest):
+        return service.register(payload.invite_code, payload.email, payload.password)
+
+    @app.post("/v1/auth/login")
+    def login(payload: LoginRequest):
+        return service.login(payload.email, payload.password)
+
     @app.get("/v1/settings/fns")
     def get_fns_settings(user_id: str = Depends(require_user)):
         return service.get_fns_settings(user_id)
@@ -43,8 +62,20 @@ def create_app(service) -> FastAPI:
     def save_fns_settings(payload: FnsSettingsRequest, user_id: str = Depends(require_user)):
         return service.save_fns_settings(user_id, payload.config, payload.target_dir)
 
+    @app.post("/v1/settings/fns/check")
+    def check_fns_settings(user_id: str = Depends(require_user)):
+        return service.check_fns_settings(user_id)
+
     @app.post("/v1/clips", status_code=201)
     def create_clip(payload: ClipRequest, user_id: str = Depends(require_user)):
         return service.create_clip(user_id, payload.url)
+
+    @app.get("/v1/clips")
+    def list_clips(user_id: str = Depends(require_user)):
+        return service.list_clips(user_id)
+
+    @app.post("/v1/clips/{task_id}/retry")
+    def retry_clip(task_id: str, user_id: str = Depends(require_user)):
+        return service.retry_clip(user_id, task_id)
 
     return app

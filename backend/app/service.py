@@ -1,18 +1,21 @@
 import hashlib
+import json
 from datetime import UTC, datetime
 from threading import Lock
+from urllib.request import Request, urlopen
 
 from backend.app.crypto import decrypt_token, encrypt_token
 from backend.app.errors import ApiError
-from backend.app.fns import parse_fns_json
+from backend.app.fns import check_fns, parse_fns_json
 from poc.fns import FnsConfig
 from poc.wechat import ClipError, validate_wechat_url
 
 
 class ClipService:
-    def __init__(self, pocketbase, fns_encryption_key: str | None = None) -> None:
+    def __init__(self, pocketbase, fns_encryption_key: str | None = None, fns_get=None) -> None:
         self.pocketbase = pocketbase
         self.fns_encryption_key = fns_encryption_key
+        self.fns_get = fns_get or self._get_fns_json
         # ponytail: process-local registration lock; use a database transaction before scaling API replicas.
         self._registration_lock = Lock()
 
@@ -43,6 +46,16 @@ class ClipService:
     def current_user(self, token: str) -> str:
         return self.pocketbase.authenticate_user(token)
 
+    def login(self, email: str, password: str) -> dict:
+        payload = self.pocketbase.login_user(email.strip(), password)
+        token = payload.get("token")
+        record = payload.get("record")
+        user_id = record.get("id") if isinstance(record, dict) else None
+        user_email = record.get("email") if isinstance(record, dict) else None
+        if not all(isinstance(item, str) and item for item in (token, user_id, user_email)):
+            raise ApiError("登录响应无效", 502)
+        return {"token": token, "user": {"id": user_id, "email": user_email}}
+
     def save_fns_settings(self, user_id: str, raw_json: str, target_dir: str) -> dict:
         if not self.fns_encryption_key:
             raise ApiError("FNS 加密未配置", 500)
@@ -66,6 +79,10 @@ class ClipService:
             return {"configured": False, "token_saved": False}
         return self._settings_summary(records[0])
 
+    def check_fns_settings(self, user_id: str) -> dict:
+        config = self.decrypt_fns_config(user_id)
+        return check_fns(config.base_url, config.token, config.vault, self.fns_get)
+
     def create_clip(self, user_id: str, url: str) -> dict:
         source_url = validate_wechat_url(url)
         if not self.pocketbase.list_records("fns_settings", f'user = "{user_id}"'):
@@ -75,6 +92,21 @@ class ClipService:
             {"user": user_id, "source_url": source_url, "status": "queued"},
         )
         return {"id": task["id"], "status": "queued", "source_url": source_url}
+
+    def list_clips(self, user_id: str) -> dict:
+        tasks = self.pocketbase.list_records("clip_tasks", f'user = "{user_id}"', 50)
+        return {"items": [self._task_summary(task) for task in tasks]}
+
+    def retry_clip(self, user_id: str, task_id: str) -> dict:
+        tasks = self.pocketbase.list_records("clip_tasks", f'id = "{task_id}" && user = "{user_id}"')
+        if not tasks:
+            raise ApiError("转存任务不存在", 404)
+        task = self.pocketbase.update_record(
+            "clip_tasks",
+            task_id,
+            {"status": "queued", "error_stage": "", "error_message": ""},
+        )
+        return self._task_summary(task)
 
     def claim_next_task(self) -> dict | None:
         tasks = self.pocketbase.list_records("clip_tasks", 'status = "queued"')
@@ -120,3 +152,20 @@ class ClipService:
             "target_dir": record["target_dir"],
             "token_saved": bool(record.get("token_ciphertext")),
         }
+
+    @staticmethod
+    def _task_summary(task: dict) -> dict:
+        return {
+            key: task[key]
+            for key in ("id", "source_url", "status", "title", "path", "error_stage", "error_message", "created", "updated")
+            if key in task
+        }
+
+    @staticmethod
+    def _get_fns_json(url: str, headers: dict[str, str]) -> dict:
+        request = Request(url, headers=headers)
+        with urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode())
+        if not isinstance(payload, dict):
+            raise ValueError("FNS response is not an object")
+        return payload

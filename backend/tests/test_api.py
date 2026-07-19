@@ -10,6 +10,15 @@ pytestmark = pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.te
 
 
 class FakeService:
+    def register(self, invite_code, email, password):
+        assert invite_code == "invite-a"
+        return {"id": "user-a", "email": email}
+
+    def login(self, email, password):
+        assert email == "a@example.com"
+        assert password == "long-password"
+        return {"token": "token-a", "user": {"id": "user-a", "email": email}}
+
     def current_user(self, token):
         if token != "token-a":
             raise ApiError("登录已失效", 401)
@@ -20,6 +29,15 @@ class FakeService:
 
     def save_fns_settings(self, user_id, raw_json, target_dir):
         raise ApiError("FNS 配置无效", 400)
+
+    def check_fns_settings(self, user_id):
+        return {"connected": True, "vault_exists": True}
+
+    def list_clips(self, user_id):
+        return {"items": [{"id": "task-a", "user": user_id, "status": "queued"}]}
+
+    def retry_clip(self, user_id, task_id):
+        return {"id": task_id, "status": "queued", "user": user_id}
 
 
 def test_create_clip_uses_authenticated_owner():
@@ -33,6 +51,33 @@ def test_create_clip_uses_authenticated_owner():
 
     assert response.status_code == 201
     assert response.json()["user"] == "user-a"
+
+
+def test_register_then_login_returns_only_session_and_public_user_fields():
+    client = TestClient(create_app(FakeService()))
+
+    registered = client.post(
+        "/v1/auth/register",
+        json={"invite_code": "invite-a", "email": "a@example.com", "password": "long-password"},
+    )
+    logged_in = client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"})
+
+    assert registered.status_code == 201
+    assert registered.json() == {"id": "user-a", "email": "a@example.com"}
+    assert logged_in.json() == {"token": "token-a", "user": {"id": "user-a", "email": "a@example.com"}}
+
+
+def test_authenticated_settings_check_and_task_list():
+    client = TestClient(create_app(FakeService()))
+    headers = {"Authorization": "Bearer token-a"}
+
+    checked = client.post("/v1/settings/fns/check", headers=headers)
+    clips = client.get("/v1/clips", headers=headers)
+    retried = client.post("/v1/clips/task-a/retry", headers=headers)
+
+    assert checked.json() == {"connected": True, "vault_exists": True}
+    assert clips.json()["items"][0]["user"] == "user-a"
+    assert retried.json()["status"] == "queued"
 
 
 def test_invalid_token_and_fns_error_never_echo_token():

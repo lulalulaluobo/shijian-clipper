@@ -20,6 +20,27 @@ class FakePocketBase:
         return self.settings[record_id]
 
 
+def test_check_settings_decrypts_token_without_returning_it():
+    calls = []
+
+    def fake_get(url, headers):
+        calls.append((url, headers))
+        return {"data": [{"vault": "obsidian"}]} if url.endswith("/api/vault") else {"name": "user"}
+
+    service = ClipService(FakePocketBase(), Fernet.generate_key().decode(), fns_get=fake_get)
+    service.save_fns_settings(
+        "user-a",
+        '{"api":"https://fns.example","apiToken":"secret","vault":"obsidian"}',
+        "00_Inbox/微信公众号",
+    )
+
+    result = service.check_fns_settings("user-a")
+
+    assert result == {"connected": True, "vault_exists": True}
+    assert calls[0][1]["token"] == "secret"
+    assert "secret" not in repr(result)
+
+
 def test_get_settings_masks_saved_token():
     service = ClipService(FakePocketBase(), Fernet.generate_key().decode())
 

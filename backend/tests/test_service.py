@@ -32,6 +32,11 @@ class FakePocketBase:
             raise ApiError("登录已失效", 401)
         return "user-a"
 
+    def login_user(self, email, password):
+        if email != "a@example.com" or password != "long-password":
+            raise ApiError("邮箱或密码错误", 401)
+        return {"token": "session-token", "record": {"id": "user-a", "email": email}}
+
 
 def test_register_consumes_matching_invite_once():
     service = ClipService(FakePocketBase())
@@ -49,3 +54,43 @@ def test_current_user_is_taken_only_from_authenticated_token():
     assert service.current_user("valid-token") == "user-a"
     with pytest.raises(ApiError, match="登录已失效"):
         service.current_user("forged-user-id")
+
+
+def test_login_returns_pocketbase_session_without_password():
+    service = ClipService(FakePocketBase())
+
+    assert service.login("a@example.com", "long-password") == {
+        "token": "session-token",
+        "user": {"id": "user-a", "email": "a@example.com"},
+    }
+
+
+def test_list_and_retry_clips_are_scoped_to_authenticated_user():
+    class TaskPocketBase:
+        task = {
+            "id": "task-a",
+            "user": "user-a",
+            "source_url": "https://mp.weixin.qq.com/s/example",
+            "status": "failed",
+            "error_message": "抓取失败",
+        }
+
+        def list_records(self, collection, filter_value, per_page=1):
+            if collection != "clip_tasks" or "user-a" not in filter_value:
+                return []
+            if "task-a" in filter_value or "id =" not in filter_value:
+                return [self.task]
+            return []
+
+        def update_record(self, collection, record_id, body):
+            assert collection == "clip_tasks"
+            assert record_id == "task-a"
+            self.task.update(body)
+            return self.task
+
+    service = ClipService(TaskPocketBase())
+
+    assert service.list_clips("user-a")["items"][0]["error_message"] == "抓取失败"
+    assert service.retry_clip("user-a", "task-a")["status"] == "queued"
+    with pytest.raises(ApiError, match="转存任务不存在"):
+        service.retry_clip("user-b", "task-a")

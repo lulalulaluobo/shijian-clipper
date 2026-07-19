@@ -42,8 +42,8 @@ class PocketBaseClient:
             raise ApiError("后端管理员认证失败", 502)
         return token
 
-    def list_records(self, collection: str, filter_value: str) -> list[dict]:
-        query = urlencode({"filter": filter_value, "perPage": 1})
+    def list_records(self, collection: str, filter_value: str, per_page: int = 1) -> list[dict]:
+        query = urlencode({"filter": filter_value, "perPage": per_page})
         payload = self.request("GET", f"/api/collections/{collection}/records?{query}", token=self._admin_token())
         items = payload.get("items")
         return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
@@ -82,3 +82,10 @@ class PocketBaseClient:
         if not isinstance(user_id, str) or not user_id:
             raise ApiError("登录已失效", 401)
         return user_id
+
+    def login_user(self, email: str, password: str) -> dict:
+        return self.request(
+            "POST",
+            "/api/collections/users/auth-with-password",
+            body={"identity": email, "password": password},
+        )
