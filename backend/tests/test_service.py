@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from backend.app.service import ApiError, ClipService
+from backend.app.errors import ApiError
+from backend.app.service import ClipService
 
 
 class FakePocketBase:
@@ -13,7 +14,7 @@ class FakePocketBase:
         self.users = {}
         self.auth_users = {"user-a": {"id": "user-a", "access_expires_at": "2999-01-01 00:00:00Z"}}
 
-    def list_records(self, collection, filter_value):
+    def list_records(self, collection, filter_value, per_page=1):
         if collection == "users" and "user-a" in filter_value:
             return [self.auth_users["user-a"]]
         if collection != "invite_codes" or self.code_hash not in filter_value:
@@ -166,25 +167,151 @@ def test_list_and_retry_clips_are_scoped_to_authenticated_user():
         service.retry_clip("user-b", "task-a")
 
 
-def test_record_attachment_task():
-    class RecordPocketBase:
-        def __init__(self):
-            self.created = []
+# ---------- 新增：notes 同步相关测试 ----------
 
-        def create_record(self, collection, body):
-            self.created.append((collection, body))
-            return body
 
-    pocketbase = RecordPocketBase()
+class NotesPocketBase:
+    """支持 notes collection 的 fake，记录 create/update/list_sorted 调用。"""
+
+    def __init__(self, notes=None):
+        self.notes = notes or []
+        self.created = []
+        self.updated = []
+
+    def create_record(self, collection, body):
+        record = {"id": f"note-{len(self.created) + 1}", "created": "2026-07-19T10:00:00Z", **body}
+        self.created.append((collection, body))
+        if collection == "notes":
+            self.notes.append(record)
+        return record
+
+    def update_record(self, collection, record_id, body):
+        self.updated.append((collection, record_id, body))
+        for note in self.notes:
+            if note["id"] == record_id:
+                note.update(body)
+                return note
+        return {"id": record_id, **body}
+
+    def list_records_sorted(self, collection, filter_value, sort="created", per_page=50):
+        # 简单过滤：只返回 delivered=false 的 notes
+        return [n for n in self.notes if not n.get("delivered", False)][:per_page]
+
+    def list_records(self, collection, filter_value, per_page=1):
+        # 支持按 id 查询单条 note（用于 _find_user_note）
+        if collection != "notes":
+            return []
+        # 简单解析 filter 里的 id 条件
+        if "id = " in filter_value:
+            for note in self.notes:
+                if note["id"] in filter_value and note.get("user") in filter_value:
+                    return [note]
+        return []
+
+
+def test_create_note_writes_article_to_notes_collection():
+    pocketbase = NotesPocketBase()
     service = ClipService(pocketbase)
-    service.record_attachment_task("user-a", "report.pdf", "succeeded", "00_Inbox/report.pdf")
+    images = ["https://mmbiz.qpic.cn/a.png", "https://mmbiz.qpic.cn/b.png"]
+
+    result = service.create_note(
+        "user-a",
+        "https://mp.weixin.qq.com/s/example",
+        "文章标题",
+        "文章标题.md",
+        "# 正文",
+        images,
+    )
 
     assert len(pocketbase.created) == 1
     collection, body = pocketbase.created[0]
-    assert collection == "clip_tasks"
+    assert collection == "notes"
     assert body["user"] == "user-a"
-    assert body["source_url"] == "https://attachment.local/report.pdf"
-    assert body["status"] == "succeeded"
-    assert body["title"] == "report.pdf"
-    assert body["path"] == "00_Inbox/report.pdf"
+    assert body["source_url"] == "https://mp.weixin.qq.com/s/example"
+    assert body["title"] == "文章标题"
+    assert body["filename"] == "文章标题.md"
+    assert body["content_md"] == "# 正文"
+    assert body["images"] == images
+    assert body["kind"] == "article"
+    assert body["delivered"] is False
+    assert "id" in result
 
+
+def test_create_attachment_note_stores_base64_bytes():
+    pocketbase = NotesPocketBase()
+    service = ClipService(pocketbase)
+
+    result = service.create_attachment_note("user-a", "report.pdf", "application/pdf", "JVBERi0=")
+
+    collection, body = pocketbase.created[0]
+    assert collection == "notes"
+    assert body["kind"] == "attachment"
+    assert body["filename"] == "report.pdf"
+    assert body["attachment_filename"] == "report.pdf"
+    assert body["attachment_mime"] == "application/pdf"
+    assert body["attachment_b64"] == "JVBERi0="
+    assert body["content_md"] == ""
+    assert body["delivered"] is False
+    assert "id" in result
+
+
+def test_list_pending_notes_returns_undelivered_sorted_by_created():
+    notes = [
+        {"id": "n1", "user": "user-a", "delivered": False, "created": "2026-07-19T09:00:00Z", "title": "t1"},
+        {"id": "n2", "user": "user-a", "delivered": False, "created": "2026-07-19T10:00:00Z", "title": "t2"},
+        {"id": "n3", "user": "user-a", "delivered": True, "created": "2026-07-19T08:00:00Z", "title": "t3"},
+    ]
+    pocketbase = NotesPocketBase(notes=notes)
+    service = ClipService(pocketbase)
+
+    result = service.list_pending_notes("user-a", "2026-07-19T00:00:00Z", limit=50)
+
+    # 排除已交付的 n3，按 created 升序
+    assert [n["id"] for n in result] == ["n1", "n2"]
+
+
+def test_ack_notes_marks_delivered_and_clears_attachment_bytes():
+    notes = [
+        {"id": "n1", "user": "user-a", "delivered": False, "attachment_b64": "JVBERi0=", "created": "2026-07-19T09:00:00Z"},
+        {"id": "n2", "user": "user-a", "delivered": False, "attachment_b64": "", "created": "2026-07-19T10:00:00Z"},
+    ]
+    pocketbase = NotesPocketBase(notes=notes)
+    service = ClipService(pocketbase)
+
+    acked = service.ack_notes("user-a", ["n1", "n2"])
+
+    assert acked == 2
+    # 至少调用 update 两次，清空 attachment_b64 并设置 delivered
+    n1_update = next(body for collection, rid, body in pocketbase.updated if rid == "n1")
+    assert n1_update["delivered"] is True
+    assert n1_update["attachment_b64"] == ""
+    assert "delivered_at" in n1_update
+
+
+def test_ack_notes_is_idempotent_for_already_delivered():
+    notes = [{"id": "n1", "user": "user-a", "delivered": True, "attachment_b64": "", "created": "2026-07-19T09:00:00Z"}]
+    pocketbase = NotesPocketBase(notes=notes)
+    service = ClipService(pocketbase)
+
+    acked = service.ack_notes("user-a", ["n1"])
+
+    # 已交付的不重复计入
+    assert acked == 0
+
+
+def test_get_note_attachment_returns_record_for_owner():
+    notes = [{"id": "n1", "user": "user-a", "attachment_b64": "JVBERi0=", "attachment_mime": "application/pdf", "attachment_filename": "r.pdf", "kind": "attachment"}]
+    pocketbase = NotesPocketBase(notes=notes)
+    service = ClipService(pocketbase)
+
+    result = service.get_note_for_user("user-a", "n1")
+    assert result["attachment_b64"] == "JVBERi0="
+
+
+def test_get_note_attachment_rejects_other_user():
+    notes = [{"id": "n1", "user": "user-a", "attachment_b64": "JVBERi0="}]
+    pocketbase = NotesPocketBase(notes=notes)
+    service = ClipService(pocketbase)
+
+    with pytest.raises(ApiError, match="不存在"):
+        service.get_note_for_user("user-b", "n1")

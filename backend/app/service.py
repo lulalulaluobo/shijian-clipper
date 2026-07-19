@@ -2,20 +2,14 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from threading import Lock
 
-from backend.app.crypto import decrypt_token, encrypt_token
 from backend.app.errors import ApiError
-from backend.app.fns import check_fns, parse_fns_json
-from backend.app.safe_http import request_public_json
 from backend.scripts.create_invite import create_invite_code
-from poc.fns import FnsConfig
 from poc.wechat import ClipError, validate_wechat_url
 
 
 class ClipService:
-    def __init__(self, pocketbase, fns_encryption_key: str | None = None, fns_get=None) -> None:
+    def __init__(self, pocketbase) -> None:
         self.pocketbase = pocketbase
-        self.fns_encryption_key = fns_encryption_key
-        self.fns_get = fns_get or self._get_fns_json
         # ponytail: process-local registration lock; use a database transaction before scaling API replicas.
         self._registration_lock = Lock()
 
@@ -81,53 +75,8 @@ class ClipService:
         )
         return {"code": code}
 
-    def save_fns_settings(self, user_id: str, raw_json: str | None, target_dir: str, attachment_dir: str | None = None) -> dict:
-        if not self.fns_encryption_key:
-            raise ApiError("FNS 加密未配置", 500)
-        if not target_dir.strip():
-            raise ApiError("目标目录不能为空", 400)
-        actual_attachment_dir = (attachment_dir or "").strip()
-        if not actual_attachment_dir:
-            actual_attachment_dir = target_dir.strip()
-            
-        existing = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
-        
-        if raw_json and raw_json.strip():
-            base_url, token, vault = parse_fns_json(raw_json)
-            token_ciphertext = encrypt_token(token, self.fns_encryption_key)
-        else:
-            if not existing:
-                raise ApiError("FNS 配置 JSON 不能为空", 400)
-            base_url = existing[0]["base_url"]
-            vault = existing[0]["vault"]
-            token_ciphertext = existing[0]["token_ciphertext"]
-            
-        body = {
-            "user": user_id,
-            "base_url": base_url,
-            "vault": vault,
-            "target_dir": target_dir.strip(),
-            "attachment_dir": actual_attachment_dir,
-            "token_ciphertext": token_ciphertext,
-        }
-        record = self.pocketbase.update_record("fns_settings", existing[0]["id"], body) if existing else self.pocketbase.create_record("fns_settings", body)
-        return self._settings_summary(record)
-
-
-    def get_fns_settings(self, user_id: str) -> dict:
-        records = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
-        if not records:
-            return {"configured": False, "token_saved": False}
-        return self._settings_summary(records[0])
-
-    def check_fns_settings(self, user_id: str) -> dict:
-        config = self.decrypt_fns_config(user_id)
-        return check_fns(config.base_url, config.token, config.vault, self.fns_get)
-
     def create_clip(self, user_id: str, url: str) -> dict:
         source_url = validate_wechat_url(url)
-        if not self.pocketbase.list_records("fns_settings", f'user = "{user_id}"'):
-            raise ApiError("请先配置 Fast Note Sync", 400)
         task = self.pocketbase.create_record(
             "clip_tasks",
             {"user": user_id, "source_url": source_url, "status": "queued"},
@@ -156,21 +105,6 @@ class ClipService:
         task = tasks[0]
         return self.pocketbase.update_record("clip_tasks", task["id"], {"status": "processing"})
 
-    def decrypt_fns_config(self, user_id: str) -> FnsConfig:
-        if not self.fns_encryption_key:
-            raise ApiError("FNS 加密未配置", 500)
-        records = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
-        if not records:
-            raise ClipError("fns", "请先配置 Fast Note Sync")
-        record = records[0]
-        return FnsConfig(
-            record["base_url"],
-            decrypt_token(record["token_ciphertext"], self.fns_encryption_key),
-            record["vault"],
-            record["target_dir"],
-            record.get("attachment_dir") or record["target_dir"],
-        )
-
     def finish_task(self, task_id: str, result: dict) -> None:
         self.pocketbase.update_record(
             "clip_tasks",
@@ -194,6 +128,7 @@ class ClipService:
         error_message: str = "",
         error_stage: str = "",
     ) -> dict:
+        """记录附件任务到 clip_tasks（保留用于 APK 任务列表显示）。"""
         source_url = f"https://attachment.local/{filename}"
         body = {
             "user": user_id,
@@ -205,6 +140,94 @@ class ClipService:
             "error_message": error_message,
         }
         return self.pocketbase.create_record("clip_tasks", body)
+
+    # ---------- notes 同步相关 ----------
+
+    def create_note(
+        self,
+        user_id: str,
+        source_url: str,
+        title: str,
+        filename: str,
+        content_md: str,
+        images: list[str],
+        kind: str = "article",
+    ) -> dict:
+        """Worker 抓取文章成功后，把 Markdown 与图片清单落 notes 表，等插件拉取。"""
+        body = {
+            "user": user_id,
+            "source_url": source_url,
+            "title": title,
+            "filename": filename,
+            "content_md": content_md,
+            "images": images,
+            "kind": kind,
+            "delivered": False,
+        }
+        return self.pocketbase.create_record("notes", body)
+
+    def create_attachment_note(
+        self,
+        user_id: str,
+        filename: str,
+        mime: str,
+        b64data: str,
+    ) -> dict:
+        """用户从客户端直接上传附件时，把文件字节（base64）落 notes 表（kind=attachment）。"""
+        body = {
+            "user": user_id,
+            "source_url": f"https://attachment.local/{filename}",
+            "title": filename,
+            "filename": filename,
+            "content_md": "",
+            "images": [],
+            "kind": "attachment",
+            "attachment_filename": filename,
+            "attachment_mime": mime,
+            "attachment_b64": b64data,
+            "delivered": False,
+        }
+        record = self.pocketbase.create_record("notes", body)
+        # 同步在 clip_tasks 记一条成功任务，便于 APK 任务列表显示
+        self.record_attachment_task(user_id, filename, "succeeded", record.get("filename", filename))
+        return {"id": record.get("id"), "filename": filename}
+
+    def list_pending_notes(self, user_id: str, since_iso: str, limit: int = 50) -> list[dict]:
+        """返回该用户 created > since_iso 且 delivered=false 的 notes，按 created 升序。"""
+        filter_value = f'user = "{user_id}" && delivered = false && created > "{since_iso}"'
+        records = self.pocketbase.list_records_sorted(
+            "notes", filter_value, sort="created", per_page=limit
+        )
+        return [self._note_summary(record) for record in records]
+
+    def ack_notes(self, user_id: str, note_ids: list[str]) -> int:
+        """把指定 notes 标记为已交付，并清空 attachment_b64 释放空间。返回实际 ack 数量。"""
+        acked = 0
+        now_iso = datetime.now(UTC).isoformat()
+        for note_id in note_ids:
+            record = self._find_user_note(user_id, note_id)
+            if record is None or record.get("delivered"):
+                continue
+            self.pocketbase.update_record(
+                "notes",
+                note_id,
+                {"delivered": True, "delivered_at": now_iso, "attachment_b64": ""},
+            )
+            acked += 1
+        return acked
+
+    def get_note_for_user(self, user_id: str, note_id: str) -> dict:
+        """读取单条 note（属主校验）。用于附件字节下载端点。"""
+        record = self._find_user_note(user_id, note_id)
+        if record is None:
+            raise ApiError("笔记不存在", 404)
+        return record
+
+    def _find_user_note(self, user_id: str, note_id: str) -> dict | None:
+        records = self.pocketbase.list_records(
+            "notes", f'id = "{note_id}" && user = "{user_id}"'
+        )
+        return records[0] if records else None
 
     @staticmethod
     def _require_active_access(user: dict) -> None:
@@ -221,18 +244,6 @@ class ClipService:
             raise ApiError("使用期限已到，请联系管理员续期", 403)
 
     @staticmethod
-    def _settings_summary(record: dict) -> dict:
-        return {
-            "configured": True,
-            "base_url": record["base_url"],
-            "vault": record["vault"],
-            "target_dir": record["target_dir"],
-            "attachment_dir": record.get("attachment_dir") or record["target_dir"],
-            "token_saved": bool(record.get("token_ciphertext")),
-        }
-
-
-    @staticmethod
     def _task_summary(task: dict) -> dict:
         return {
             key: task[key]
@@ -241,5 +252,19 @@ class ClipService:
         }
 
     @staticmethod
-    def _get_fns_json(url: str, headers: dict[str, str]) -> dict:
-        return request_public_json(url, method="GET", headers=headers)
+    def _note_summary(record: dict) -> dict:
+        return {
+            key: record.get(key)
+            for key in (
+                "id",
+                "kind",
+                "source_url",
+                "title",
+                "filename",
+                "content_md",
+                "images",
+                "attachment_filename",
+                "attachment_mime",
+                "created",
+            )
+        }
