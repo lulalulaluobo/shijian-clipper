@@ -181,3 +181,13 @@ def test_upload_attachment_success(monkeypatch):
 
     assert response.status_code == 201
     assert response.json() == {"path": "00_Inbox/report.pdf"}
+
+
+
+def test_pwa_static_mount_success():
+    client = TestClient(create_app(FakeService()))
+    response = client.get("/")
+    assert response.status_code == 200
+    assert b"<!doctype html>" in response.content
+    assert b"Shijian" in response.content
+

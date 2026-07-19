@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>拾笺 · Shijian</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <style>
+    :root {
+      --ink: #1c211d;
+      --paper: #f5f1e8;
+      --line: #c9c2b5;
+      --leaf: #2f6249;
+      --alert: #b54b32;
+      --muted: #6b7069;
+      --panel: #fffdf7;
+      --shadow: rgba(28, 33, 29, .06);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+    }
+
+    .brand h1 {
+      font-size: 1.25rem;
+      margin: 0;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      font-size: 1.4rem;
+      cursor: pointer;
+      color: var(--leaf);
+      padding: 4px;
+      transition: opacity .15s ease;
+    }
+
+    .btn-icon:hover { opacity: 0.8; }
+
+    main {
+      width: min(600px, calc(100% - 32px));
+      margin: 20px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px var(--shadow);
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-group:last-child { margin-bottom: 0; }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--ink);
+      background: #fff;
+      font-size: 0.95rem;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--leaf);
+      box-shadow: 0 0 0 3px rgba(47, 98, 73, 0.15);
+    }
+
+    textarea { min-height: 100px; resize: vertical; }
+
+    .btn {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      padding: 14px 20px;
+      color: #fff;
+      background: var(--leaf);
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 700;
+      transition: background-color .15s ease, transform .1s ease;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn:hover { background-color: #244e3a; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { background: var(--muted); cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--leaf);
+      border: 1px solid var(--leaf);
+    }
+    .btn-secondary:hover { background: rgba(47, 98, 73, 0.05); }
+
+    .btn-danger {
+      background: var(--alert);
+    }
+    .btn-danger:hover { background: #963a25; }
+
+    /* File upload design */
+    .file-upload-area {
+      border: 2px dashed var(--line);
+      border-radius: 8px;
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(28, 33, 29, 0.01);
+      transition: background 0.15s ease;
+    }
+
+    .file-upload-area:hover { background: rgba(28, 33, 29, 0.03); }
+
+    .file-upload-icon {
+      font-size: 2.2rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .file-upload-text {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    /* Progress bar */
+    .progress-container {
+      display: none;
+      margin-top: 16px;
+      background: var(--paper);
+      border-radius: 8px;
+      height: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--leaf);
+      width: 0%;
+      transition: width 0.1s ease;
+    }
+
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fff;
+      mix-blend-mode: difference;
+    }
+
+    /* Task timeline */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .task-item {
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 6px var(--shadow);
+    }
+
+    .task-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 70%;
+    }
+
+    .task-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .task-time {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .task-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .badge-pending { background: #eee; color: #666; }
+    .badge-running { background: #dff0e6; color: var(--leaf); }
+    .badge-succeeded { background: #e0f2fe; color: #0284c7; }
+    .badge-failed { background: #fef2f2; color: var(--alert); }
+
+    .btn-retry {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      border-radius: 4px;
+    }
+
+    /* Auth Screens */
+    #auth-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--paper);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .auth-container {
+      width: min(400px, calc(100% - 32px));
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .auth-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      text-align: center;
+      margin: 0;
+    }
+
+    .auth-toggle {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .auth-toggle span {
+      color: var(--leaf);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+
+    /* Settings modal */
+    #settings-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--paper);
+      z-index: 50;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    #settings-screen.open {
+      transform: translateY(0);
+    }
+
+    .settings-header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .settings-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .settings-content {
+      width: min(600px, calc(100% - 32px));
+      margin: 20px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 200;
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+
+    #toast.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen">
+    <div class="auth-container card">
+      <div style="text-align:center; margin-bottom:12px;">
+        <img src="/icon-192.png" style="width:64px; height:64px; border-radius:12px;" alt="拾笺">
+      </div>
+      <h2 class="auth-title" id="auth-header-title">登录到 拾笺</h2>
+      
+      <!-- LOGIN FORM -->
+      <form id="login-form" autocomplete="off" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-email">电子邮箱</label>
+          <input type="email" id="login-email" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">密码</label>
+          <input type="password" id="login-password" required>
+        </div>
+        <button type="submit" class="btn" style="margin-top: 16px;">立即登录</button>
+      </form>
+
+      <!-- REGISTER FORM -->
+      <form id="register-form" autocomplete="off" style="display:none;" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="reg-code">注册邀请码</label>
+          <input type="text" id="reg-code" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-email">电子邮箱</label>
+          <input type="email" id="reg-email" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-password">密码 (最少 8 位)</label>
+          <input type="password" id="reg-password" minlength="8" required>
+        </div>
+        <button type="submit" class="btn" style="margin-top: 16px;">创建账户</button>
+      </form>
+
+      <div class="auth-toggle" id="auth-toggle-link" onclick="toggleAuthMode()">
+        没有账号？<span>立即注册</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <header>
+    <div class="brand">
+      <img src="/icon-192.png" alt="拾笺">
+      <h1>拾笺 · Shijian</h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" onclick="openSettings()">⚙️</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- WECHAT CLIP CARD -->
+    <div class="card">
+      <h3 class="card-title">公众号文章转存</h3>
+      <form id="clip-form" onsubmit="handleClip(event)">
+        <div class="form-group">
+          <input type="url" id="clip-url" placeholder="粘贴公众号文章链接..." required>
+        </div>
+        <button type="submit" class="btn" id="btn-clip">发送转存任务</button>
+      </form>
+    </div>
+
+    <!-- ATTACHMENT CARD -->
+    <div class="card">
+      <h3 class="card-title">附件文件转存</h3>
+      <div class="file-upload-area" onclick="triggerFileSelect()">
+        <div class="file-upload-icon">📎</div>
+        <div class="file-upload-text">点击选择并转存图片、PDF、文档等</div>
+      </div>
+      <input type="file" id="file-input" style="display:none;" onchange="handleFileSelected(event)">
+      
+      <div class="progress-container" id="progress-container">
+        <div class="progress-bar" id="progress-bar"></div>
+        <div class="progress-text" id="progress-text">0%</div>
+      </div>
+    </div>
+
+    <!-- TASK TIMELINE -->
+    <div class="card">
+      <h3 class="card-title">历史任务</h3>
+      <div class="task-list" id="task-list">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- SETTINGS SCREEN (SLIDE UP) -->
+  <div id="settings-screen">
+    <div class="settings-header">
+      <h2 class="settings-title">设置中心</h2>
+      <button class="btn-icon" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-content">
+      
+      <!-- FNS CONFIG CARD -->
+      <div class="card">
+        <h3 class="card-title">Fast Note Sync 配置</h3>
+        <form onsubmit="handleSaveSettings(event)">
+          <div class="form-group">
+            <label for="fns-json">FNS API 配置 JSON (仅修改目录时可留空)</label>
+            <textarea id="fns-json" placeholder='{"api": "https://obsync.example.com", "apiToken": "...", "vault": "..."}'></textarea>
+          </div>
+          <div class="form-group">
+            <label for="fns-target-dir">微信公众号转存目录</label>
+            <input type="text" id="fns-target-dir" required>
+          </div>
+          <div class="form-group">
+            <label for="fns-attachment-dir">附件转存目录</label>
+            <input type="text" id="fns-attachment-dir" required>
+          </div>
+          <div style="display:flex; gap:12px; margin-top:16px;">
+            <button type="submit" class="btn">保存配置</button>
+            <button type="button" class="btn btn-secondary" onclick="checkConnection()">检测连接</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- MEMBER INVITE CARD -->
+      <div class="card" id="invite-card" style="display:none;">
+        <h3 class="card-title">成员邀请</h3>
+        <p style="font-size:0.85rem; color:var(--muted); margin:0 0 16px;">邀请码仅能被使用注册一次。</p>
+        <button class="btn" onclick="generateInviteCode()">生成并复制邀请码</button>
+      </div>
+
+      <!-- ACCOUNT LOGOUT -->
+      <div class="card">
+        <button class="btn btn-danger" onclick="handleLogout()">退出登录</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast">提示信息</div>
+
+  <script src="/register-sw.js"></script>
+  <script>
+    let TOKEN = localStorage.getItem("shijian_token") || "";
+    let isRegisterMode = false;
+    let pollInterval = null;
+
+    // Check auth on load
+    if (TOKEN) {
+      document.getElementById("auth-screen").style.display = "none";
+      onAuthenticated();
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.innerText = message;
+      toast.classList.add("visible");
+      setTimeout(() => {
+        toast.classList.remove("visible");
+      }, 3000);
+    }
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      const title = document.getElementById("auth-header-title");
+      const loginForm = document.getElementById("login-form");
+      const registerForm = document.getElementById("register-form");
+      const toggleLink = document.getElementById("auth-toggle-link");
+
+      if (isRegisterMode) {
+        title.innerText = "注册新账户";
+        loginForm.style.display = "none";
+        registerForm.style.display = "block";
+        toggleLink.innerHTML = "已有账号？<span>立即登录</span>";
+      } else {
+        title.innerText = "登录到 拾笺";
+        loginForm.style.display = "block";
+        registerForm.style.display = "none";
+        toggleLink.innerHTML = "没有账号？<span>立即注册</span>";
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+
+      try {
+        const res = await fetch("/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          TOKEN = data.token;
+          localStorage.setItem("shijian_token", TOKEN);
+          document.getElementById("auth-screen").style.display = "none";
+          showToast("登录成功！");
+          onAuthenticated();
+        } else {
+          showToast(data.message || "登录失败");
+        }
+      } catch (err) {
+        showToast("网络连接异常");
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const inviteCode = document.getElementById("reg-code").value.trim();
+      const email = document.getElementById("reg-email").value.trim();
+      const password = document.getElementById("reg-password").value;
+
+      try {
+        const res = await fetch("/v1/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invite_code: inviteCode, email, password })
+        });
+        const data = await res.json();
+        if (res.status === 201) {
+          showToast("注册成功！请直接登录");
+          toggleAuthMode();
+        } else {
+          showToast(data.message || "注册失败");
+        }
+      } catch (err) {
+        showToast("网络连接异常");
+      }
+    }
+
+    function handleLogout() {
+      TOKEN = "";
+      localStorage.removeItem("shijian_token");
+      document.getElementById("auth-screen").style.display = "flex";
+      closeSettings();
+      if (pollInterval) clearInterval(pollInterval);
+    }
+
+    function onAuthenticated() {
+      fetchSettings();
+      fetchClips();
+      checkInvitePermission();
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(fetchClips, 5000);
+    }
+
+    async function fetchSettings() {
+      try {
+        const res = await fetch("/v1/settings/fns", {
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        if (res.status === 401) return handleLogout();
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("fns-json").value = ""; // Always leave empty for privacy/optional modify
+          document.getElementById("fns-target-dir").value = data.target_dir || "";
+          document.getElementById("fns-attachment-dir").value = data.attachment_dir || "";
+        }
+      } catch (err) {}
+    }
+
+    async function checkInvitePermission() {
+      try {
+        const res = await fetch("/v1/invites", {
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.ok && data.can_create) {
+          document.getElementById("invite-card").style.display = "block";
+        } else {
+          document.getElementById("invite-card").style.display = "none";
+        }
+      } catch (err) {}
+    }
+
+    async function handleSaveSettings(e) {
+      e.preventDefault();
+      const config = document.getElementById("fns-json").value.trim() || null;
+      const targetDir = document.getElementById("fns-target-dir").value.trim();
+      const attachmentDir = document.getElementById("fns-attachment-dir").value.trim();
+
+      try {
+        const res = await fetch("/v1/settings/fns", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${TOKEN}`
+          },
+          body: JSON.stringify({ config, target_dir: targetDir, attachment_dir: attachmentDir })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast("配置保存成功！");
+          fetchSettings();
+        } else {
+          showToast(data.message || "保存配置失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
+    }
+
+    async function checkConnection() {
+      try {
+        const res = await fetch("/v1/settings/fns/check", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast("连接测试成功！Obsidian 服务连通");
+        } else {
+          showToast(data.message || "连接测试失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
+    }
+
+    async function generateInviteCode() {
+      try {
+        const res = await fetch("/v1/invites", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.status === 201 && data.code) {
+          navigator.clipboard.writeText(data.code).then(() => {
+            showToast(`邀请码生成并复制成功: ${data.code}`);
+          }).catch(() => {
+            showToast(`生成邀请码: ${data.code}，请手动复制`);
+          });
+        } else {
+          showToast(data.message || "生成邀请码失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
+    }
+
+    async function handleClip(e) {
+      e.preventDefault();
+      const url = document.getElementById("clip-url").value.trim();
+      const btn = document.getElementById("btn-clip");
+      btn.disabled = true;
+
+      try {
+        const res = await fetch("/v1/clips", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${TOKEN}`
+          },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (res.status === 201) {
+          showToast("转存任务创建成功！");
+          document.getElementById("clip-url").value = "";
+          fetchClips();
+        } else {
+          showToast(data.message || "创建转存任务失败");
+        }
+      } catch (err) {
+        showToast("网络请求错误");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function triggerFileSelect() {
+      document.getElementById("file-input").click();
+    }
+
+    function handleFileSelected(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadAttachment(file);
+    }
+
+    function uploadAttachment(file) {
+      const progressContainer = document.getElementById("progress-container");
+      const progressBar = document.getElementById("progress-bar");
+      const progressText = document.getElementById("progress-text");
+
+      progressContainer.style.display = "block";
+      progressBar.style.width = "0%";
+      progressText.innerText = "0%";
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/v1/clips/attachments", true);
+      xhr.setRequestHeader("Authorization", `Bearer ${TOKEN}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = Math.round((e.loaded / e.total) * 100);
+          progressBar.style.width = `${percentComplete}%`;
+          progressText.innerText = `${percentComplete}%`;
+        }
+      };
+
+      xhr.onload = () => {
+        progressContainer.style.display = "none";
+        document.getElementById("file-input").value = "";
+        if (xhr.status === 201) {
+          showToast("文件上传转存成功！");
+          fetchClips();
+        } else {
+          try {
+            const res = JSON.parse(xhr.responseText);
+            showToast(res.message || "上传失败");
+          } catch (err) {
+            showToast("文件中转上传失败");
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        progressContainer.style.display = "none";
+        document.getElementById("file-input").value = "";
+        showToast("文件上传网络异常");
+      };
+
+      const formData = new FormData();
+      formData.append("file", file);
+      xhr.send(formData);
+    }
+
+    async function fetchClips() {
+      if (!TOKEN) return;
+      try {
+        const res = await fetch("/v1/clips", {
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          renderClips(data);
+        }
+      } catch (err) {}
+    }
+
+    function renderClips(clips) {
+      const list = document.getElementById("task-list");
+      if (clips.length === 0) {
+        list.innerHTML = `<div style="text-align:center; color:var(--muted); font-size:0.9rem; padding:12px;">暂无历史转存任务</div>`;
+        return;
+      }
+
+      list.innerHTML = clips.map(task => {
+        const statusMap = {
+          "pending": { class: "badge-pending", text: "排队中" },
+          "running": { class: "badge-running", text: "正在转存" },
+          "succeeded": { class: "badge-succeeded", text: "已写入" },
+          "failed": { class: "badge-failed", text: "转存失败" }
+        };
+        const statusInfo = statusMap[task.status] || { class: "badge-pending", text: task.status };
+        const timeStr = new Date(task.updated_at).toLocaleString();
+        
+        let isAttachment = task.source_url.startsWith("https://attachment.local/");
+        let displayName = isAttachment ? task.source_url.substring("https://attachment.local/".length) : task.title || task.source_url;
+
+        let retryButton = "";
+        if (task.status === "failed" && !isAttachment) {
+          retryButton = `<button class="btn btn-secondary btn-retry" onclick="retryTask('${task.id}')">重试</button>`;
+        }
+
+        return `
+          <div class="task-item">
+            <div class="task-details">
+              <span class="task-name">${escapeHtml(displayName)}</span>
+              <span class="task-time">${timeStr}</span>
+            </div>
+            <div class="task-meta">
+              <span class="badge ${statusInfo.class}">${statusInfo.text}</span>
+              ${retryButton}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function retryTask(taskId) {
+      try {
+        const res = await fetch(`/v1/clips/${taskId}/retry`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast("重试任务已提交！");
+          fetchClips();
+        } else {
+          showToast(data.message || "重试请求提交失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function openSettings() {
+      document.getElementById("settings-screen").classList.add("open");
+    }
+
+    function closeSettings() {
+      document.getElementById("settings-screen").classList.remove("open");
+    }
+  </script>
+</body>
+</html>

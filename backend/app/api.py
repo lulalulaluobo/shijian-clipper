@@ -2,6 +2,7 @@ from hashlib import sha256
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend.app.errors import ApiError
@@ -168,4 +169,10 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
             )
             raise ClipError("worker", "转存任务处理失败") from error
 
+    from pathlib import Path
+    static_dir = Path(__file__).parent.parent / "static"
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+
     return app
+
