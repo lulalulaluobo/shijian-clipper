@@ -4,30 +4,36 @@ services:
   pocketbase:
     image: ${POCKETBASE_IMAGE}
     restart: unless-stopped
-    network_mode: host
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:18081:8090"
     environment:
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
     volumes:
       - pocketbase_data:/pb/pb_data
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18081/api/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-    command: ["serve", "--http=127.0.0.1:18081"]
+    command: ["serve", "--http=0.0.0.0:8090"]
 
   api:
     image: ${APP_IMAGE}
     restart: unless-stopped
-    network_mode: host
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:18080:8000"
     environment:
-      POCKETBASE_URL: http://127.0.0.1:18081
+      POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
       FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}
       WORKER_POLL_INTERVAL_SECONDS: 2
-    command: ["uvicorn", "backend.app.main:app", "--host", "127.0.0.1", "--port", "18080"]
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       pocketbase:
         condition: service_healthy
@@ -35,9 +41,10 @@ services:
   worker:
     image: ${APP_IMAGE}
     restart: unless-stopped
-    network_mode: host
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     environment:
-      POCKETBASE_URL: http://127.0.0.1:18081
+      POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
       FNS_ENCRYPTION_KEY: ${FNS_ENCRYPTION_KEY}

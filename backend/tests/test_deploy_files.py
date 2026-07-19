@@ -41,9 +41,9 @@ def test_access_expiry_migration_adds_invite_code_and_user_expiry_fields():
     assert 'new DateField({ name: "access_expires_at" })' in migration
 
 
-def test_vps_compose_keeps_backend_on_loopback_when_using_host_network():
+def test_vps_compose_publishes_only_loopback_ports_without_host_network():
     compose = (ROOT / "deploy/compose.vps.yaml").read_text()
 
-    assert compose.count("network_mode: host") == 3
-    assert "--host\", \"127.0.0.1" in compose
-    assert "--http=127.0.0.1:18081" in compose
+    assert "network_mode: host" not in compose
+    assert '"127.0.0.1:18080:8000"' in compose
+    assert '"127.0.0.1:18081:8090"' in compose

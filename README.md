@@ -2,9 +2,7 @@
 
 [中文说明](README_CN.md)
 
-Shijian is a personal capture bridge to Obsidian. Share a WeChat article to the Android app, and it queues the article for conversion and delivery to your own Fast Note Sync vault. The product is designed to grow from WeChat links to text, images, and other captured information.
-
-Suggested GitHub repository name: `shijian-clipper`.
+Shijian is an Android and Python service for capturing WeChat public-account articles into an Obsidian vault through Fast Note Sync. This repository contains the Android client, API, Worker, PocketBase migrations, and local H5 debugging PoC.
 
 ## Android app
 
@@ -14,7 +12,13 @@ Suggested GitHub repository name: `shijian-clipper`.
 - Input: share a WeChat public-account article from the system share sheet, or paste its HTTPS URL.
 - Output: Markdown is written to the configured Fast Note Sync vault and Obsidian folder; article images keep their original URLs.
 
-Accounts are invitation-only. An invitation grants 30 days of use from registration; PocketBase administrators can extend a user by editing `access_expires_at` in the `users` collection.
+## Invitation and access management
+
+- Registration requires a single-use invitation code. A code has no expiry before it is consumed.
+- The first successful registration consumes the code and assigns 30 days of access.
+- A PocketBase superuser can edit `users.access_expires_at` to extend or shorten a specific user's access.
+- A PocketBase superuser can set `users.can_create_invites` for a user. Authorized users then see **Member invitation** in the Android Settings page and can generate one single-use invitation at a time.
+- Do not manually create an `invite_codes` record unless both its plaintext `code` and SHA-256 `code_hash` are set correctly.
 
 ## Build the APK
 

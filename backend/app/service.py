@@ -1,12 +1,11 @@
 import hashlib
-import json
 from datetime import UTC, datetime, timedelta
 from threading import Lock
-from urllib.request import Request, urlopen
 
 from backend.app.crypto import decrypt_token, encrypt_token
 from backend.app.errors import ApiError
 from backend.app.fns import check_fns, parse_fns_json
+from backend.app.safe_http import request_public_json
 from backend.scripts.create_invite import create_invite_code
 from poc.fns import FnsConfig
 from poc.wechat import ClipError, validate_wechat_url
@@ -202,9 +201,4 @@ class ClipService:
 
     @staticmethod
     def _get_fns_json(url: str, headers: dict[str, str]) -> dict:
-        request = Request(url, headers=headers)
-        with urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode())
-        if not isinstance(payload, dict):
-            raise ValueError("FNS response is not an object")
-        return payload
+        return request_public_json(url, method="GET", headers=headers)

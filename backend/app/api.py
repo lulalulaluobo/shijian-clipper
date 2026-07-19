@@ -1,33 +1,57 @@
-from fastapi import Depends, FastAPI, Header, HTTPException
+from hashlib import sha256
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.app.errors import ApiError
+from backend.app.rate_limit import RateLimiter
 from poc.wechat import ClipError
 
 
 class ClipRequest(BaseModel):
-    url: str
+    url: str = Field(min_length=1, max_length=2048)
 
 
 class FnsSettingsRequest(BaseModel):
-    config: str
-    target_dir: str
+    config: str = Field(min_length=1, max_length=16_384)
+    target_dir: str = Field(min_length=1, max_length=512)
 
 
 class RegisterRequest(BaseModel):
-    invite_code: str = Field(min_length=1)
-    email: str = Field(min_length=3)
-    password: str = Field(min_length=8)
+    invite_code: str = Field(min_length=1, max_length=128)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(min_length=3)
-    password: str = Field(min_length=1)
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
 
 
-def create_app(service) -> FastAPI:
+def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     app = FastAPI()
+    limiter = rate_limiter or RateLimiter()
+
+    @app.middleware("http")
+    async def limit_requests(request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > 20_480:
+            return JSONResponse(status_code=413, content={"message": "请求体过大"})
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").rsplit(",", 1)[-1].strip()
+        path = request.url.path
+        if path in {"/v1/auth/login", "/v1/auth/register"}:
+            key, limit, window = f"auth:{client_ip}", 10, 300
+        elif request.method == "POST" and (
+            path in {"/v1/settings/fns/check", "/v1/clips"} or path.endswith("/retry")
+        ):
+            token = request.headers.get("authorization", "")
+            key, limit, window = f"work:{sha256(token.encode()).hexdigest()}", 20, 60
+        else:
+            return await call_next(request)
+        if not limiter.allow(key, limit=limit, window_seconds=window):
+            return JSONResponse(status_code=429, content={"message": "请求过于频繁，请稍后再试"})
+        return await call_next(request)
 
     @app.exception_handler(ApiError)
     def handle_api_error(_, error: ApiError):

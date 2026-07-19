@@ -18,13 +18,19 @@
 
 ## 创建邀请码
 
-邀请码只在创建时显示一次，数据库只保存它的 SHA-256 哈希。每个注册码只能成功注册一次。
+命令行创建的邀请码只在创建时显示一次，数据库只保存它的 SHA-256 哈希。每个注册码只能成功注册一次。用户在 APK 内生成的邀请码会同时保存 `code` 和 SHA-256 `code_hash`，便于超级管理员在 PocketBase 中管理。
 
 ```sh
 docker compose -f deploy/compose.yaml --env-file deploy/.env exec api python -m backend.scripts.create_invite
 ```
 
 把输出的完整字符串单独发给用户。用户首次打开 APK 时填入服务地址、邀请码、邮箱和密码；之后只需登录。
+
+## 用户期限与邀请权限
+
+- 邀请码被首次注册后，用户默认获得 30 天使用期限。
+- 在 PocketBase 的 `users` 集合编辑 `access_expires_at` 可调整该用户的到期时间。
+- 在 `users` 集合将 `can_create_invites` 设为 `true`，该用户即可在 APK「设置 → 成员邀请」生成一次性邀请码。
 
 ## 构建 APK
 

@@ -3,8 +3,8 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
-from urllib.request import Request, urlopen
 
+from backend.app.safe_http import UnsafeUrlError, normalize_https_root_url, request_public_json
 from poc.clip import run
 from poc.fns import FnsConfig
 from poc.wechat import ClipError, fetch_wechat_article
@@ -22,7 +22,11 @@ def parse_fns_config(value: object, target_dir: object) -> FnsConfig:
         raise ClipError("validate", "FNS 配置缺少 api、apiToken 或 vault")
     if not isinstance(target_dir, str) or not target_dir.strip():
         raise ClipError("validate", "目标目录不能为空")
-    return FnsConfig(api.strip(), token.strip(), vault.strip(), target_dir.strip())
+    try:
+        base_url = normalize_https_root_url(api)
+    except UnsafeUrlError as error:
+        raise ClipError("validate", "FNS 服务地址必须是 HTTPS 根地址") from error
+    return FnsConfig(base_url, token.strip(), vault.strip(), target_dir.strip())
 
 
 def run_payload(
@@ -40,7 +44,7 @@ def run_payload(
 
 
 def _fetch(source_url: str, timeout: int = 30) -> str:
-    return fetch_wechat_article(source_url, timeout=timeout, opener=urlopen)
+    return fetch_wechat_article(source_url, timeout=timeout)
 
 
 def _post(
@@ -49,14 +53,18 @@ def _post(
     payload: dict[str, str],
     timeout: int = 30,
 ) -> dict[str, object]:
-    request = Request(
+    return request_public_json(
         url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={**headers, "Content-Type": "application/json"},
         method="POST",
+        headers=headers,
+        payload=payload,
+        timeout=timeout,
+        allow_private_addresses=True,
     )
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+
+
+def is_loopback_host(host: str) -> bool:
+    return host.strip().lower() in {"127.0.0.1", "::1", "localhost"}
 
 
 def make_handler(
@@ -127,7 +135,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="启动微信公众号转存本地调试页")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--allow-network", action="store_true")
     args = parser.parse_args()
+    if not args.allow_network and not is_loopback_host(args.host):
+        parser.error("调试页默认只能绑定本机；如确需局域网访问，请显式传入 --allow-network")
     server = ThreadingHTTPServer((args.host, args.port), make_handler())
     print(f"调试页已启动：http://{args.host}:{args.port}")
     server.serve_forever()

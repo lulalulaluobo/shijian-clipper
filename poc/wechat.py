@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+
+from backend.app.safe_http import request_public_text
 
 
 WECHAT_HEADERS = {
@@ -43,11 +44,13 @@ def validate_wechat_url(url: str) -> str:
     return normalized
 
 
-def fetch_wechat_article(source_url: str, timeout: int = 30, opener=None) -> str:
-    request = Request(source_url, headers=WECHAT_HEADERS)
-    open_request = opener or urlopen
-    with open_request(request, timeout=timeout) as response:
-        return response.read().decode("utf-8")
+def fetch_wechat_article(source_url: str, timeout: int = 30, request_text=request_public_text) -> str:
+    return request_text(
+        validate_wechat_url(source_url),
+        headers=WECHAT_HEADERS,
+        timeout=timeout,
+        expected_host="mp.weixin.qq.com",
+    )
 
 
 class _ArticleParser(HTMLParser):

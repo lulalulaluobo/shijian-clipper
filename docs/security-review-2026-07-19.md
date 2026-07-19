@@ -135,3 +135,21 @@ App 生成的邀请码会同时保存 `code` 和 `code_hash`（[`backend/app/ser
 3. 建立 release signing，再实现 GitHub Release 更新提示（M-01）。
 4. 处理标题路径净化、后台凭据交付和公网管理面硬化（M-03、M-05、M-06）。
 5. 启用仓库保护与依赖自动安全更新，随后做一次真实 VPS 配置复审（M-02、M-04）。
+
+## 修复状态（2026-07-19）
+
+已完成：
+
+- H-01：FNS 服务端请求现要求 HTTPS 根地址、固定到解析出的公网 IP、拒绝重定向，并限制响应为 5 MiB。仅绑定本机的 H5 PoC 允许本地代理地址，以兼容开发机网络代理。
+- H-02：登录/注册、FNS 检查、创建与重试任务已加入内存限流；入口请求体、FNS 配置字段和远程响应均有大小上限。
+- M-03：AI 部署报告不再回显 PocketBase 管理员密码。
+- M-04：VPS Compose 已移除 host 网络；API/PocketBase 仅映射到回环地址，API 与 PocketBase 镜像改为非 root 用户并移除 Linux capabilities。
+- M-05：Caddy 与 Nginx 模板加入请求体上限、安全响应头，且反向代理覆盖而非拼接客户端转发地址。
+- M-06、L-01：笔记文件名已净化；H5 PoC 默认拒绝绑定非 loopback 地址，除非显式传入 `--allow-network`。
+- M-02（部分）：已加入 Dependabot 配置，并启用 GitHub Dependabot Security Updates。
+
+仍需用户决策：
+
+- M-01：建立发布签名 keystore 后才能发布可安全升级的 release APK；从当前 Debug APK 迁移到新的 release 证书时，现有测试用户需要卸载旧包后重新安装。
+- M-02（部分）：`main` 分支保护会改变当前直推发布流程，需先决定是否改为 Pull Request + CI 审核。
+- L-02：保留邀请码明文 `code` 是后台查看真实邀请码的产品需求，属于已知取舍；L-03 仅在多 Worker 扩容前需要处理。

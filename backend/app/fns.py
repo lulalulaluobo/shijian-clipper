@@ -1,6 +1,7 @@
 import json
 
 from backend.app.errors import ApiError
+from backend.app.safe_http import UnsafeUrlError, normalize_https_root_url
 
 
 def parse_fns_json(raw: str) -> tuple[str, str, str]:
@@ -13,7 +14,11 @@ def parse_fns_json(raw: str) -> tuple[str, str, str]:
     api, token, vault = (value.get(name) for name in ("api", "apiToken", "vault"))
     if not all(isinstance(item, str) and item.strip() for item in (api, token, vault)):
         raise ApiError("FNS 配置缺少 api、apiToken 或 vault", 400)
-    return api.strip().rstrip("/"), token.strip(), vault.strip()
+    try:
+        base_url = normalize_https_root_url(api)
+    except UnsafeUrlError as error:
+        raise ApiError("FNS 服务地址必须是 HTTPS 根地址", 400) from error
+    return base_url, token.strip(), vault.strip()
 
 
 def check_fns(base_url: str, token: str, vault: str, get) -> dict[str, bool]:

@@ -1,11 +1,10 @@
 from collections.abc import Callable
-import json
 import time
-from urllib.request import Request, urlopen
 
 from backend.app.config import Settings
 from backend.app.pocketbase import PocketBaseClient
 from backend.app.service import ClipService
+from backend.app.safe_http import request_public_json
 from poc.clip import run
 from poc.wechat import ClipError, fetch_wechat_article
 
@@ -25,14 +24,7 @@ def process_once(service, fetch: Callable, post: Callable, run_clip=run) -> bool
 
 
 def post_fns(url: str, headers: dict[str, str], payload: dict[str, str]) -> dict:
-    request = Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode(),
-        headers={**headers, "Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode())
+    return request_public_json(url, method="POST", headers=headers, payload=payload)
 
 
 def main() -> None:

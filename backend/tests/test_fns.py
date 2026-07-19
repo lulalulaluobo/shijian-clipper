@@ -1,3 +1,6 @@
+import pytest
+
+from backend.app.errors import ApiError
 from backend.app.fns import check_fns, parse_fns_json
 
 
@@ -32,3 +35,9 @@ def test_parse_fns_json_requires_reference_project_fields():
         "secret",
         "obsidian",
     )
+
+
+def test_parse_fns_json_requires_a_root_https_endpoint():
+    for api in ("http://fns.example", "https://fns.example/note", "https://user@fns.example"):
+        with pytest.raises(ApiError, match="FNS 服务地址必须是 HTTPS 根地址"):
+            parse_fns_json(f'{{"api":"{api}","apiToken":"secret","vault":"obsidian"}}')

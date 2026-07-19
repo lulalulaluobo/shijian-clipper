@@ -2,9 +2,7 @@
 
 [English](README.md)
 
-拾笺是一个将个人信息转存到 Obsidian 的工具。将微信公众号文章从系统分享面板发送到 Android App，或粘贴文章链接，服务端便会抓取文章、转为 Markdown，并写入你自己的 Fast Note Sync 仓库。产品后续可逐步扩展到文本、图片及更多信息类型。
-
-建议的 GitHub 仓库名：`shijian-clipper`。
+拾笺由 Android 客户端与 Python 服务组成，用于将微信公众号文章经 Fast Note Sync 转存到 Obsidian。本仓库包含 Android 客户端、API、Worker、PocketBase 迁移和本地 H5 调试页。
 
 ## Android App
 
@@ -15,7 +13,13 @@
 - 输出：文章 Markdown 会写入配置的 Fast Note Sync 仓库与 Obsidian 目录；图片保留原始链接。
 - 状态：任务排队或执行时，首页会自动刷新状态；完成、失败后会停止刷新并显示最终状态。
 
-账户通过邀请码注册。邀请码在注册前不会过期；注册后默认可使用 30 天。PocketBase 管理员可在 `users` 集合编辑 `access_expires_at`，延长指定用户的使用期限。
+## 邀请码与使用期限管理
+
+- 账户必须通过一次性邀请码注册；邀请码在被使用前不会过期。
+- 邀请码首次成功注册后即被消费，注册用户默认获得 30 天使用期限。
+- PocketBase 超级管理员可在 `users` 集合修改指定用户的 `access_expires_at`，延长或缩短该用户的使用期限。
+- PocketBase 超级管理员可为指定用户开启 `users.can_create_invites`。被授权用户会在 APK「设置 → 成员邀请」看到生成入口，可生成并分享一次性邀请码。
+- 不要直接随意新建 `invite_codes` 记录；真实 `code` 与对应 SHA-256 `code_hash` 必须同时正确写入，邀请码才能注册。
 
 ## 构建 APK
 

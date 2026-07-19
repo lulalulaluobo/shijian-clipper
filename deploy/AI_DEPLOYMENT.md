@@ -16,7 +16,7 @@
 
 ## 当前项目的生产拓扑
 
-`deploy/compose.vps.yaml` 使用 Linux 主机网络：
+`deploy/compose.vps.yaml` 使用隔离的 Docker 网络，并只将以下端口发布到主机回环地址：
 
 - API：`127.0.0.1:18080`
 - PocketBase：`127.0.0.1:18081`
@@ -120,10 +120,10 @@ docker compose -f compose.vps.yaml --env-file .env exec api python -m backend.sc
 - 健康检查：https://<api-domain>/healthz
 - PocketBase 管理地址：<https://<admin-domain>/_/ 或 SSH 隧道后的 http://127.0.0.1:18081/_/>
 - 超级管理员账号：<POCKETBASE_ADMIN_EMAIL>
-- 超级管理员密码：<本次部署设置的密码，仅此一次显示>
+- 超级管理员密码：<部署前由用户自行保存；报告不回显>
 - 首个一次性邀请码：<本次命令输出，仅此一次显示>
 - 当前镜像：<API tag>；<PocketBase tag>
 - 回滚镜像：<部署前的 tag，首次部署则写“无”>
 ```
 
-报告还应简述常用管理功能：在 `users` 查看用户、编辑 `access_expires_at` 延长使用期限、勾选 `can_create_invites` 授予生成邀请码权限；在 `clip_tasks` 查看转存状态和错误；在 `fns_settings` 仅检查配置摘要，不导出 token。管理员密码和首个邀请码只在这份面向用户的最终报告出现一次，绝不写入 Git、日志或普通部署回显；FNS token、SSH 私钥和完整 `.env` 永远不得输出。
+报告还应简述常用管理功能：在 `users` 查看用户、编辑 `access_expires_at` 延长使用期限、勾选 `can_create_invites` 授予生成邀请码权限；在 `clip_tasks` 查看转存状态和错误；在 `fns_settings` 仅检查配置摘要，不导出 token。管理员密码不应出现在报告、Git、日志或普通部署回显中；首个邀请码仅在这份面向用户的最终报告显示一次；FNS token、SSH 私钥和完整 `.env` 永远不得输出。

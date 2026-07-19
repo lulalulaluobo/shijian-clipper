@@ -3,6 +3,7 @@ import pytest
 
 from backend.app.api import create_app
 from backend.app.errors import ApiError
+from backend.app.rate_limit import RateLimiter
 from poc.wechat import ClipError
 
 
@@ -123,3 +124,24 @@ def test_clip_error_returns_stage_without_stacktrace():
 
     assert response.status_code == 400
     assert response.json() == {"stage": "validate", "message": "仅支持 HTTPS 微信公众号文章链接"}
+
+
+def test_rejects_an_oversized_fns_configuration_before_calling_service():
+    response = TestClient(create_app(FakeService())).put(
+        "/v1/settings/fns",
+        headers={"Authorization": "Bearer token-a"},
+        json={"config": "x" * 16_385, "target_dir": "Inbox"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_limits_repeated_login_attempts_from_one_client():
+    client = TestClient(create_app(FakeService(), RateLimiter()))
+
+    for _ in range(10):
+        assert client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"}).status_code == 200
+
+    response = client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"})
+
+    assert response.status_code == 429

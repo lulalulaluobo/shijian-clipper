@@ -42,3 +42,15 @@ class FnsTests(unittest.TestCase):
             write_note(config, "测试文章", "正文", lambda *_: {"status": False})
 
         self.assertEqual(context.exception.stage, "fns")
+
+    def test_sanitizes_untrusted_article_title_before_building_path(self):
+        config = FnsConfig("https://fns.example.com", "secret-token", "Main", "Inbox")
+        called: dict[str, object] = {}
+
+        def post(url: str, headers: dict[str, str], payload: dict[str, str]) -> dict[str, object]:
+            called.update(payload=payload)
+            return {"status": True, "data": {"path": payload["path"]}}
+
+        write_note(config, "../../secrets", "正文", post)
+
+        self.assertEqual(called["payload"]["path"], "Inbox/secrets.md")
