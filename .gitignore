@@ -4,6 +4,7 @@
 node_modules/
 dist/
 references/
+.worktrees/
 *.db-shm
 *.db-wal
 *.log
