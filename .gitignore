@@ -19,3 +19,6 @@ __pycache__/
 *.db-wal
 *.log
 deploy/.env
+*.jks
+*.keystore
+android/release.properties

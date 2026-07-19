@@ -42,6 +42,8 @@ gradle -p android :app:assembleDebug
 
 产物在 `android/app/build/outputs/apk/debug/app-debug.apk`。这是调试签名包；正式分发前请配置自己的 release 签名，并把后端域名告知用户。
 
+正式发布请遵循仓库根目录 [README](../README.md#build-and-publish-a-signed-release) 的签名构建流程。APK 内的更新功能只接受同一 GitHub 仓库中、与安装包使用相同签名证书的正式 Release；用户确认下载后，Android 系统仍会再次确认安装。
+
 ## 日常运维
 
 - 查看运行状态：`docker compose -f deploy/compose.yaml --env-file deploy/.env ps`

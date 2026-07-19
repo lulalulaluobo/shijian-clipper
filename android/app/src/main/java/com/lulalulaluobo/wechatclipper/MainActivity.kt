@@ -1,6 +1,7 @@
 package com.lulalulaluobo.wechatclipper
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -298,7 +300,25 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     var serverUrl by remember { mutableStateOf(session.baseUrl) }
     var message by remember { mutableStateOf("保存 FNS JSON 后，令牌只保存在服务端加密存储中。") }
     var busy by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<ReleaseUpdate?>(null) }
+    var updateMessage by remember { mutableStateOf("正在检查应用更新…") }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updating by remember { mutableStateOf(false) }
+    var showUpdateConfirmation by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    suspend fun checkForUpdate(showCurrentVersion: Boolean) {
+        checkingUpdate = true
+        try {
+            availableUpdate = withContext(Dispatchers.IO) { UpdateClient.checkForUpdate(BuildConfig.VERSION_CODE) }
+            updateMessage = availableUpdate?.let { "发现新版本 v${it.versionName}" }
+                ?: if (showCurrentVersion) "当前已是最新版本。" else "已是最新版本。"
+        } catch (error: Exception) {
+            updateMessage = error.message ?: "无法检查更新，请稍后重试。"
+        } finally {
+            checkingUpdate = false
+        }
+    }
 
     LaunchedEffect(session) {
         try {
@@ -309,6 +329,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
             message = error.userMessage()
         }
     }
+    LaunchedEffect(Unit) { checkForUpdate(showCurrentVersion = false) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = { TextButton(onClick = onBack) { Text("返回") } }) }) { padding ->
         Column(
@@ -406,8 +427,65 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !busy && serverUrl.trim().removeSuffix("/") != session.baseUrl,
             ) { Text("切换服务端并重新登录") }
+            Spacer(Modifier.height(16.dp))
+            Text("关于", style = MaterialTheme.typography.titleMedium)
+            Text("拾笺 · v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyMedium)
+            TextButton(
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/lulalulaluobo/shijian-clipper")))
+                },
+            ) { Text("GitHub 项目主页") }
+            if (availableUpdate != null) {
+                Text(updateMessage, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                Button(
+                    onClick = { showUpdateConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !updating,
+                ) { Text(if (updating) "正在校验更新…" else "下载并安装 v${availableUpdate?.versionName}") }
+            } else {
+                Text(updateMessage, style = MaterialTheme.typography.bodySmall)
+                TextButton(
+                    onClick = { scope.launch { checkForUpdate(showCurrentVersion = true) } },
+                    enabled = !checkingUpdate,
+                ) { Text(if (checkingUpdate) "正在检查…" else "检查更新") }
+            }
             TextButton(onClick = onLogout) { Text("退出登录") }
         }
+    }
+
+    val update = availableUpdate
+    if (showUpdateConfirmation && update != null) {
+        AlertDialog(
+            onDismissRequest = { showUpdateConfirmation = false },
+            title = { Text("安装 v${update.versionName}？") },
+            text = { Text("将从 GitHub Release 下载 APK，并校验 SHA-256、包名、版本号与当前签名。校验通过后，仍需你在 Android 系统安装页确认。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUpdateConfirmation = false
+                        updating = true
+                        scope.launch {
+                            try {
+                                updateMessage = "正在下载并校验更新…"
+                                val apkFile = withContext(Dispatchers.IO) { UpdateClient.downloadAndVerify(context, update) }
+                                if (!UpdateClient.canRequestInstalls(context)) {
+                                    updateMessage = "更新已校验。请允许拾笺安装未知应用后，再点击安装。"
+                                    UpdateClient.openInstallPermissionSettings(context)
+                                } else {
+                                    updateMessage = "更新已校验，Android 将请求你的安装确认。"
+                                    UpdateClient.requestUserConfirmedInstall(context, apkFile)
+                                }
+                            } catch (error: Exception) {
+                                updateMessage = error.message ?: "更新失败，请稍后重试。"
+                            } finally {
+                                updating = false
+                            }
+                        }
+                    },
+                ) { Text("下载并校验") }
+            },
+            dismissButton = { TextButton(onClick = { showUpdateConfirmation = false }) { Text("取消") } },
+        )
     }
 }
 

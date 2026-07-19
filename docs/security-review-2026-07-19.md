@@ -147,9 +147,11 @@ App 生成的邀请码会同时保存 `code` 和 `code_hash`（[`backend/app/ser
 - M-05：Caddy 与 Nginx 模板加入请求体上限、安全响应头，且反向代理覆盖而非拼接客户端转发地址。
 - M-06、L-01：笔记文件名已净化；H5 PoC 默认拒绝绑定非 loopback 地址，除非显式传入 `--allow-network`。
 - M-02（部分）：已加入 Dependabot 配置，并启用 GitHub Dependabot Security Updates。
+- M-01：已建立正式 Android release keystore；Gradle 仅在四个签名环境变量齐备时允许 release 构建，私钥不进入仓库。`v1.1.0` 起的 APK 使用该证书签名。
+- APK 更新：应用只读取固定 GitHub 仓库的 latest Release；要求精确的版本化资产名称、GitHub 返回的 SHA-256 摘要、匹配的包名/版本号和与已安装 App 相同的签名证书。下载与安装均需要用户确认，安装最终由 Android 系统处理。
 
 仍需用户决策：
 
-- M-01：建立发布签名 keystore 后才能发布可安全升级的 release APK；从当前 Debug APK 迁移到新的 release 证书时，现有测试用户需要卸载旧包后重新安装。
+- Debug → release 迁移：从旧 Debug APK 迁移到 `v1.1.0` 的用户需先卸载旧包、安装正式签名包并重新登录；此后同一 keystore 签名的版本可正常升级。
 - M-02（部分）：`main` 分支保护会改变当前直推发布流程，需先决定是否改为 Pull Request + CI 审核。
 - L-02：保留邀请码明文 `code` 是后台查看真实邀请码的产品需求，属于已知取舍；L-03 仅在多 Worker 扩容前需要处理。

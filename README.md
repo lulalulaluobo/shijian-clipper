@@ -11,6 +11,7 @@ Shijian is an Android and Python service for capturing WeChat public-account art
 - Self-hosting: change the service URL from Settings, then sign in again.
 - Input: share a WeChat public-account article from the system share sheet, or paste its HTTPS URL.
 - Output: Markdown is written to the configured Fast Note Sync vault and Obsidian folder; article images keep their original URLs.
+- About: Settings shows the installed version and GitHub repository. It checks the latest GitHub Release, highlights a newer version, verifies its SHA-256 and signing certificate, then hands installation to Android for user confirmation.
 
 ## Invitation and access management
 
@@ -29,6 +30,25 @@ sh -c 'cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug'
 ```
 
 The Debug APK is created at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+## Build and publish a signed release
+
+Only distribute a release-signed APK. Keep the keystore outside this repository and back it up with its password; changing the signing certificate prevents in-place upgrades. The release Gradle task deliberately fails unless all four environment variables are present:
+
+```bash
+export SHIJIAN_RELEASE_STORE_FILE="/safe/path/shijian-release.jks"
+export SHIJIAN_RELEASE_STORE_PASSWORD="…"
+export SHIJIAN_RELEASE_KEY_ALIAS="shijian-release"
+export SHIJIAN_RELEASE_KEY_PASSWORD="…"
+
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
+sh -c 'cd android && ./gradlew :app:testDebugUnitTest :app:assembleRelease'
+```
+
+Publish `android/app/build/outputs/apk/release/app-release.apk` as a GitHub Release asset named `Shijian-v<versionName>-<versionCode>-release.apk`, with a matching tag `v<versionName>`. GitHub calculates and exposes the asset `sha256` digest through its Release API; the app rejects releases without that digest, unexpected asset names/URLs, mismatched package metadata, or a certificate different from the installed app. Installation is never silent: users confirm the download in the app and the install in Android.
+
+The first signed release cannot upgrade an older Debug-signed installation. Test users must uninstall the Debug APK, install the signed release, and log in again. Subsequent releases signed with the same keystore upgrade normally.
 
 ## Local H5 PoC
 
