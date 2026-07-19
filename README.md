@@ -1,5 +1,7 @@
 # Shijian · 拾笺
 
+[中文说明](README_CN.md)
+
 Shijian is a personal capture bridge to Obsidian. Share a WeChat article to the Android app, and it queues the article for conversion and delivery to your own Fast Note Sync vault. The product is designed to grow from WeChat links to text, images, and other captured information.
 
 Suggested GitHub repository name: `shijian-clipper`.
@@ -34,4 +36,4 @@ Open `http://127.0.0.1:8765`. FNS API tokens are kept only in memory in the H5 p
 
 ## Deployment
 
-Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). Never commit `.env`, FNS tokens, or signing keys.
+Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys.

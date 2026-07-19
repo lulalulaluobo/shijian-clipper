@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -192,13 +193,15 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
     var handledShare by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    fun refresh() {
-        scope.launch {
-            try {
-                tasks = withContext(Dispatchers.IO) { client.listClips() }
-            } catch (error: Exception) {
-                message = error.userMessage()
+    suspend fun refresh(updateMessage: Boolean = false) {
+        try {
+            val updatedTasks = withContext(Dispatchers.IO) { client.listClips() }
+            tasks = updatedTasks
+            if (updateMessage) {
+                message = clipProgressMessage(updatedTasks) ?: "转存状态已更新。"
             }
+        } catch (error: Exception) {
+            message = error.userMessage()
         }
     }
     fun submit(url: String) {
@@ -212,7 +215,7 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
                 val task = withContext(Dispatchers.IO) { client.createClip(url) }
                 tasks = listOf(task) + tasks
                 draft = ""
-                message = "已加入转存队列。"
+                message = clipProgressMessage(listOf(task)) ?: "转存状态已更新。"
             } catch (error: Exception) {
                 message = error.userMessage()
             } finally {
@@ -221,7 +224,15 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
         }
     }
 
+    val hasActiveTasks = tasks.any { it.status == "queued" || it.status == "processing" }
+
     LaunchedEffect(session) { refresh() }
+    LaunchedEffect(session, hasActiveTasks) {
+        while (hasActiveTasks) {
+            delay(2_000)
+            refresh(updateMessage = true)
+        }
+    }
     LaunchedEffect(sharedUrl, session.token) {
         if (sharedUrl != null && sharedUrl != handledShare) {
             handledShare = sharedUrl
@@ -247,9 +258,9 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
                 tasks.forEach { TaskCard(it, onRetry = { task ->
                     scope.launch {
                         try {
-                            withContext(Dispatchers.IO) { client.retryClip(task.id) }
-                            message = "任务已重新加入队列。"
-                            refresh()
+                            val retriedTask = withContext(Dispatchers.IO) { client.retryClip(task.id) }
+                            tasks = tasks.map { current -> if (current.id == retriedTask.id) retriedTask else current }
+                            message = clipProgressMessage(listOf(retriedTask)) ?: "转存状态已更新。"
                         } catch (error: Exception) {
                             message = error.userMessage()
                         }
@@ -402,10 +413,16 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
 
 private fun ClipTask.statusLabel(): String = when (status) {
     "queued" -> "等待转存"
-    "processing" -> "正在转存"
+    "processing" -> "正在抓取并写入"
     "succeeded" -> "已写入 Obsidian"
     "failed" -> "转存失败"
     else -> status
+}
+
+fun clipProgressMessage(tasks: List<ClipTask>): String? = when {
+    tasks.any { it.status == "processing" } -> "正在抓取文章并写入 Obsidian…"
+    tasks.any { it.status == "queued" } -> "任务在队列中，正在等待转存…"
+    else -> null
 }
 
 private fun normalizeServerUrl(value: String): String {
