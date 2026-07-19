@@ -4,13 +4,16 @@ from poc.server import ATTACHMENT_INDEX_PATH, INDEX_PATH
 
 
 class WebPageTests(unittest.TestCase):
-    def test_has_json_config_form_without_browser_storage(self):
+    def test_has_clip_form_without_browser_storage(self):
         page = INDEX_PATH.read_text(encoding="utf-8")
 
-        self.assertIn('id="fns-config"', page)
+        self.assertIn('id="clip-form"', page)
         self.assertIn('id="article-url"', page)
-        self.assertIn('id="target-dir"', page)
+        self.assertIn('id="markdown-output"', page)
         self.assertIn('fetch("/api/clip"', page)
+        # 不再有 FNS 相关字段
+        self.assertNotIn("fns-config", page)
+        self.assertNotIn("target-dir", page)
         self.assertNotIn("localStorage", page)
         self.assertNotIn("sessionStorage", page)
 
@@ -20,5 +23,8 @@ class WebPageTests(unittest.TestCase):
         self.assertIn('id="attachment-form"', page)
         self.assertIn('id="attachment-file"', page)
         self.assertIn('fetch("/api/attachment"', page)
+        # 不再有 FNS 相关字段
+        self.assertNotIn("fns-config", page)
+        self.assertNotIn("target-dir", page)
         self.assertNotIn("localStorage", page)
         self.assertNotIn("sessionStorage", page)

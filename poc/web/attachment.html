@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FNS 附件转存 / 本地 PoC</title>
+  <title>附件预览 / 本地 PoC</title>
   <style>
     :root { --ink: #1c211d; --paper: #f5f1e8; --line: #c9c2b5; --leaf: #2f6249; --alert: #b54b32; --muted: #6b7069; --panel: #fffdf7; }
     * { box-sizing: border-box; }
@@ -18,9 +18,8 @@
     .section { padding: 20px 0; border-top: 1px solid var(--line); }
     .section:first-child { padding-top: 0; border-top: 0; }
     label { display: block; font-size: .72rem; font-weight: 700; margin-bottom: 9px; }
-    input, textarea { width: 100%; padding: 13px 14px; border: 1px solid var(--ink); background: #fff; font: 1rem/1.5 "SFMono-Regular", Consolas, monospace; }
-    textarea { min-height: 142px; resize: vertical; }
-    input:focus, textarea:focus { outline: 3px solid #b8d7c5; outline-offset: 2px; }
+    input { width: 100%; padding: 13px 14px; border: 1px solid var(--ink); background: #fff; font: 1rem/1.5 "SFMono-Regular", Consolas, monospace; }
+    input:focus { outline: 3px solid #b8d7c5; outline-offset: 2px; }
     button { width: 100%; border: 0; padding: 16px 20px; color: #fff; background: var(--leaf); cursor: pointer; font-weight: 700; }
     button:disabled { background: #8b938c; cursor: wait; }
     #result { display: none; margin-top: 28px; padding: 22px 24px; }
@@ -28,30 +27,22 @@
     #result.success { border-left: 6px solid var(--leaf); }
     #result.error { border-left: 6px solid var(--alert); }
     .status { font-size: .7rem; color: var(--muted); font-weight: 700; }
-    #result-message { margin: 8px 0 0; line-height: 1.6; white-space: pre-wrap; }
+    #result-message { margin: 8px 0 0; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">Local / FNS Attachment PoC</div>
-    <h1>把一个附件，送进你的 Obsidian Vault。</h1>
-    <p class="lede">仅本机调试，单文件最大 20 MiB。浏览器配置不保存；成功时本地调试服务会删除暂存副本。</p>
+    <div class="eyebrow">Local / Attachment Preview PoC</div>
+    <h1>选择一个附件，本地预览 base64。</h1>
+    <p class="lede">仅本机调试，单文件最大 20 MiB。服务只会读取文件并返回 base64 预览，不会上传到任何后端。</p>
 
     <form id="attachment-form" autocomplete="off">
-      <section class="section">
-        <label for="fns-config">FNS API 配置 JSON</label>
-        <textarea id="fns-config" required spellcheck="false" autocapitalize="off" placeholder='{"api":"https://sync.example.com","apiToken":"…","vault":"MyVault"}'></textarea>
-      </section>
       <section class="section">
         <label for="attachment-file">测试附件</label>
         <input id="attachment-file" type="file" required accept="image/*,.pdf,.xlsx,.xls,.docx,.pptx,.txt,.csv">
         <p class="hint">建议先使用 PNG、PDF 或 XLSX 的非重要副本。</p>
       </section>
-      <section class="section">
-        <label for="target-dir">FNS 目标目录</label>
-        <input id="target-dir" required value="00_Inbox/附件/PoC">
-      </section>
-      <button id="submit-button" type="submit">上传并验证</button>
+      <button id="submit-button" type="submit">读取预览</button>
     </form>
 
     <section id="result" aria-live="polite" aria-atomic="true">
@@ -61,9 +52,7 @@
   </main>
   <script>
     const form = document.getElementById("attachment-form");
-    const configInput = document.getElementById("fns-config");
     const fileInput = document.getElementById("attachment-file");
-    const targetDirInput = document.getElementById("target-dir");
     const submitButton = document.getElementById("submit-button");
     const result = document.getElementById("result");
     const resultLabel = document.getElementById("result-label");
@@ -78,32 +67,30 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const file = fileInput.files[0];
-      try {
-        const config = JSON.parse(configInput.value);
-        if (!config.api || !config.apiToken || !config.vault) throw new Error("配置中需要 api、apiToken 和 vault 字段。");
-        if (!file) throw new Error("请选择测试附件。");
-      } catch (error) {
-        showResult("error", "配置错误", error.message || "输入无效。");
+      if (!file) {
+        showResult("error", "配置错误", "请选择测试附件。");
         return;
       }
 
       submitButton.disabled = true;
-      submitButton.textContent = "正在上传…";
-      showResult("success", "处理中", "正在暂存并写入 Fast Note Sync…");
+      submitButton.textContent = "正在读取…";
+      showResult("success", "处理中", "正在读取文件并编码 base64…");
       try {
         const formData = new FormData();
-        formData.append("fns_config", configInput.value);
-        formData.append("target_dir", targetDirInput.value);
         formData.append("file", file, file.name);
         const response = await fetch("/api/attachment", { method: "POST", body: formData });
         const payload = await response.json();
-        if (!response.ok) throw new Error(`[${payload.stage || "request"}] ${payload.message || "附件转存失败"}`);
-        showResult("success", "已写入", `${payload.path}\n暂存文件：${payload.staging_cleaned ? "已清理" : "未清理"}`);
+        if (!response.ok) throw new Error(`[${payload.stage || "request"}] ${payload.message || "附件预览失败"}`);
+        showResult(
+          "success",
+          "已读取",
+          `文件名：${payload.filename}\nMIME：${payload.mime}\n大小：${payload.size} bytes\nBase64 预览：${payload.b64_preview}…`,
+        );
       } catch (error) {
-        showResult("error", "转存失败", error.message || "请求失败，请检查本地服务与 FNS 配置。");
+        showResult("error", "预览失败", error.message || "请求失败，请检查本地服务。");
       } finally {
         submitButton.disabled = false;
-        submitButton.textContent = "上传并验证";
+        submitButton.textContent = "读取预览";
       }
     });
   </script>

@@ -10,17 +10,8 @@ from poc.wechat import ClipError
 
 
 class ServerPayloadTests(unittest.TestCase):
-    def test_uses_fns_json_fields(self):
-        payload = {
-            "url": "https://mp.weixin.qq.com/s/example",
-            "target_dir": "Inbox",
-            "fns_config": {
-                "api": "https://fns.example.com",
-                "apiToken": "token",
-                "vault": "Main",
-                "wsApi": "wss://unused.example.com/api/user/sync",
-            },
-        }
+    def test_run_payload_returns_markdown_and_images(self):
+        payload = {"url": "https://mp.weixin.qq.com/s/example"}
 
         def fetch(url: str) -> str:
             return (
@@ -28,30 +19,21 @@ class ServerPayloadTests(unittest.TestCase):
                 '<div id="js_content"><p>正文</p></div>'
             )
 
-        def post(url: str, headers: dict[str, str], request: dict[str, str]) -> dict[str, object]:
-            self.assertEqual(url, "https://fns.example.com/api/note")
-            self.assertEqual(headers, {"token": "token"})
-            self.assertEqual(request["vault"], "Main")
-            return {"status": True, "data": {"path": request["path"]}}
+        result = run_payload(payload, fetch)
 
-        result = run_payload(payload, fetch, post)
+        self.assertEqual(result["title"], "测试文章")
+        self.assertIn("正文", result["markdown"])
+        self.assertEqual(result["source_url"], "https://mp.weixin.qq.com/s/example")
+        self.assertEqual(result["image_count"], 0)
+        self.assertEqual(result["images"], [])
+        # 没有任何 FNS path 字段
+        self.assertNotIn("path", result)
 
-        self.assertEqual(result, {"title": "测试文章", "image_count": 0, "path": "Inbox/测试文章.md"})
-
-    def test_does_not_echo_fns_token_in_validation_error(self):
+    def test_run_payload_requires_url(self):
         with self.assertRaises(ClipError) as context:
-            run_payload(
-                {
-                    "url": "not-a-url",
-                    "target_dir": "Inbox",
-                    "fns_config": {"apiToken": "do-not-echo"},
-                },
-                lambda _: "",
-                lambda *_: {},
-            )
+            run_payload({}, lambda _: "")
 
         self.assertEqual(context.exception.stage, "validate")
-        self.assertNotIn("do-not-echo", str(context.exception))
 
 
 class LocalHttpServerTests(unittest.TestCase):
@@ -59,10 +41,7 @@ class LocalHttpServerTests(unittest.TestCase):
         def fetch(url: str) -> str:
             return '<meta property="og:title" content="测试文章"><div id="js_content"><p>正文</p></div>'
 
-        def post(url: str, headers: dict[str, str], request: dict[str, str]) -> dict[str, object]:
-            return {"status": True, "data": {"path": request["path"]}}
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(fetch, post))
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(fetch))
         self.thread = threading.Thread(target=self.server.serve_forever)
         self.thread.start()
 
@@ -85,24 +64,29 @@ class LocalHttpServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b'id="clip-form"', content)
 
-    def test_api_error_does_not_echo_fns_token(self):
+    def test_api_clip_returns_markdown_and_images(self):
         body = json.dumps(
-            {
-                "url": "not-a-url",
-                "target_dir": "Inbox",
-                "fns_config": {
-                    "api": "https://fns.example.com",
-                    "apiToken": "do-not-echo",
-                    "vault": "Main",
-                },
-            }
+            {"url": "https://mp.weixin.qq.com/s/example"}
         ).encode("utf-8")
+
+        status, content = self._request("POST", "/api/clip", body)
+
+        self.assertEqual(status, 200)
+        payload = json.loads(content)
+        self.assertEqual(payload["title"], "测试文章")
+        self.assertIn("正文", payload["markdown"])
+        self.assertEqual(payload["source_url"], "https://mp.weixin.qq.com/s/example")
+        self.assertEqual(payload["image_count"], 0)
+        self.assertEqual(payload["images"], [])
+        self.assertNotIn("path", payload)
+
+    def test_api_clip_returns_validate_error_for_missing_url(self):
+        body = json.dumps({}).encode("utf-8")
 
         status, content = self._request("POST", "/api/clip", body)
 
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(content)["stage"], "validate")
-        self.assertNotIn(b"do-not-echo", content)
 
     def test_attachment_page_is_served(self):
         status, content = self._request("GET", "/attachment.html")
@@ -110,27 +94,9 @@ class LocalHttpServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b'id="attachment-form"', content)
 
-    def test_attachment_endpoint_writes_to_fns_and_reports_cleanup(self):
-        captured = {}
-
-        def upload(config, staged_file, target_path):
-            captured.update(config=config, target_path=target_path)
-            self.assertEqual(staged_file.read_bytes(), b"pdf-content")
-            staged_file.unlink()
-            return target_path
-
-        self.server.shutdown()
-        self.thread.join()
-        self.server.server_close()
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(upload=upload))
-        self.thread = threading.Thread(target=self.server.serve_forever)
-        self.thread.start()
-
+    def test_attachment_endpoint_returns_base64_preview(self):
         boundary = "----ShijianTest"
         body = (
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"fns_config\"\r\n\r\n"
-            '{"api":"https://fns.example","apiToken":"secret","vault":"obsidian"}\r\n'
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"target_dir\"\r\n\r\n00_Inbox/附件/PoC\r\n"
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"report.pdf\"\r\n"
             "Content-Type: application/pdf\r\n\r\n"
         ).encode() + b"pdf-content" + f"\r\n--{boundary}--\r\n".encode()
@@ -143,9 +109,18 @@ class LocalHttpServerTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(content), {"path": "00_Inbox/附件/PoC/report.pdf", "staging_cleaned": True})
-        self.assertEqual(captured["config"].vault, "obsidian")
-        self.assertEqual(captured["target_path"], "00_Inbox/附件/PoC/report.pdf")
+        payload = json.loads(content)
+        self.assertEqual(payload["filename"], "report.pdf")
+        self.assertEqual(payload["mime"], "application/pdf")
+        self.assertEqual(payload["size"], len(b"pdf-content"))
+        self.assertIn("b64_preview", payload)
+        # base64 preview is a prefix of the full base64-encoded content
+        import base64
+        full_b64 = base64.b64encode(b"pdf-content").decode("ascii")
+        self.assertTrue(full_b64.startswith(payload["b64_preview"]))
+        # no FNS upload fields
+        self.assertNotIn("path", payload)
+        self.assertNotIn("staging_cleaned", payload)
 
 
 class WechatFetchTests(unittest.TestCase):

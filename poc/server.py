@@ -1,17 +1,13 @@
 import argparse
+import base64
 import json
-import os
-import tempfile
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
-from backend.app.fns_attachment import upload_staged_attachment
-from backend.app.safe_http import UnsafeUrlError, normalize_https_root_url, request_public_json
 from poc.clip import run
-from poc.fns import FnsConfig, _safe_filename, write_note
 from poc.wechat import ClipError, fetch_wechat_article
 
 
@@ -19,105 +15,51 @@ MAX_REQUEST_BYTES = 64 * 1024
 MAX_ATTACHMENT_REQUEST_BYTES = 20 * 1024 * 1024
 INDEX_PATH = Path(__file__).with_name("web") / "index.html"
 ATTACHMENT_INDEX_PATH = Path(__file__).with_name("web") / "attachment.html"
-ATTACHMENT_STAGING_DIR = Path(tempfile.gettempdir()) / "shijian-fns-h5-poc"
-def parse_fns_config(value: object, target_dir: object) -> FnsConfig:
-    if not isinstance(value, dict):
-        raise ClipError("validate", "FNS 配置必须是 JSON 对象")
-    api = value.get("api")
-    token = value.get("apiToken")
-    vault = value.get("vault")
-    if not all(isinstance(item, str) and item.strip() for item in (api, token, vault)):
-        raise ClipError("validate", "FNS 配置缺少 api、apiToken 或 vault")
-    if not isinstance(target_dir, str) or not target_dir.strip():
-        raise ClipError("validate", "目标目录不能为空")
-    try:
-        base_url = normalize_https_root_url(api)
-    except UnsafeUrlError as error:
-        raise ClipError("validate", "FNS 服务地址必须是 HTTPS 根地址") from error
-    return FnsConfig(base_url, token.strip(), vault.strip(), target_dir.strip())
 
 
 def run_payload(
     payload: object,
     fetch: Callable[[str], str],
-    post: Callable[[str, dict[str, str], dict[str, str]], dict[str, object]],
 ) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ClipError("validate", "请求必须是 JSON 对象")
     url = payload.get("url")
-    if not isinstance(url, str):
+    if not isinstance(url, str) or not url.strip():
         raise ClipError("validate", "缺少公众号文章链接")
-    config = parse_fns_config(payload.get("fns_config"), payload.get("target_dir"))
-    # poc.clip.run 已不再写 FNS；此处保留旧契约，由 server 侧调用 write_note 落库。
     clip_result = run(url, fetch)
-    title = clip_result["title"]
-    author = clip_result["author"]
-    source_url = clip_result["source_url"]
-    markdown = clip_result["markdown"]
-    note_content = "\n".join(
-        [
-            "---",
-            f"title: {json.dumps(title, ensure_ascii=False)}",
-            f"author: {json.dumps(author, ensure_ascii=False)}",
-            f"source: {json.dumps(source_url, ensure_ascii=False)}",
-            "---",
-            "",
-            f"# {title}",
-            "",
-            markdown,
-        ]
-    )
-    path = write_note(config, title, note_content, post)
-    return {"title": title, "image_count": len(clip_result["images"]), "path": path}
+    images = clip_result.get("images", []) or []
+    return {
+        "title": clip_result["title"],
+        "author": clip_result["author"],
+        "source_url": clip_result["source_url"],
+        "markdown": clip_result["markdown"],
+        "image_count": len(images),
+        "images": images,
+    }
 
 
-def run_attachment_payload(
-    payload: object,
-    upload: Callable[[FnsConfig, Path, str], str] = upload_staged_attachment,
-) -> dict[str, object]:
+def run_attachment_payload(payload: object) -> dict[str, object]:
+    """PoC 附件端点：只接收文件、返回 base64 预览，不再上传到任何后端。"""
     if not isinstance(payload, dict):
         raise ClipError("validate", "附件请求无效")
-    raw_config = payload.get("fns_config")
-    target_dir = payload.get("target_dir")
     filename = payload.get("filename")
     content = payload.get("content")
-    if not isinstance(raw_config, str):
-        raise ClipError("validate", "缺少 FNS 配置")
+    mime = payload.get("mime")
     if not isinstance(filename, str) or not filename or not isinstance(content, bytes):
         raise ClipError("validate", "缺少附件文件")
-    try:
-        config_value = json.loads(raw_config)
-    except json.JSONDecodeError as error:
-        raise ClipError("validate", "FNS 配置不是有效 JSON") from error
-    config = parse_fns_config(config_value, target_dir)
-    target_path = f"{config.target_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
-    ATTACHMENT_STAGING_DIR.mkdir(parents=True, exist_ok=True)
-    descriptor, raw_path = tempfile.mkstemp(prefix="attachment-", suffix=Path(filename).suffix, dir=ATTACHMENT_STAGING_DIR)
-    staged_file = Path(raw_path)
-    with os.fdopen(descriptor, "wb") as file:
-        file.write(content)
-    path = upload(config, staged_file, target_path)
-    return {"path": path, "staging_cleaned": not staged_file.exists()}
+    if not isinstance(mime, str) or not mime:
+        mime = "application/octet-stream"
+    encoded = base64.b64encode(content).decode("ascii")
+    return {
+        "filename": filename,
+        "mime": mime,
+        "size": len(content),
+        "b64_preview": encoded[:100],
+    }
 
 
 def _fetch(source_url: str, timeout: int = 30) -> str:
     return fetch_wechat_article(source_url, timeout=timeout)
-
-
-def _post(
-    url: str,
-    headers: dict[str, str],
-    payload: dict[str, str],
-    timeout: int = 30,
-) -> dict[str, object]:
-    return request_public_json(
-        url,
-        method="POST",
-        headers=headers,
-        payload=payload,
-        timeout=timeout,
-        allow_private_addresses=True,
-    )
 
 
 def is_loopback_host(host: str) -> bool:
@@ -126,8 +68,6 @@ def is_loopback_host(host: str) -> bool:
 
 def make_handler(
     fetch: Callable[[str], str] = _fetch,
-    post: Callable[[str, dict[str, str], dict[str, str]], dict[str, object]] = _post,
-    upload: Callable[[FnsConfig, Path, str], str] = upload_staged_attachment,
 ) -> type[BaseHTTPRequestHandler]:
     class ClipHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
@@ -145,7 +85,7 @@ def make_handler(
             if self.path == "/api/clip":
                 try:
                     payload = self._read_json_body()
-                    result = run_payload(payload, fetch, post)
+                    result = run_payload(payload, fetch)
                 except ClipError as error:
                     self._json_response(400, {"stage": error.stage, "message": str(error)})
                     return
@@ -156,7 +96,7 @@ def make_handler(
                 return
             if self.path == "/api/attachment":
                 try:
-                    result = run_attachment_payload(self._read_multipart_body(), upload)
+                    result = run_attachment_payload(self._read_multipart_body())
                 except ClipError as error:
                     self._json_response(400, {"stage": error.stage, "message": str(error)})
                     return
@@ -207,12 +147,7 @@ def make_handler(
                         raise ClipError("validate", "附件文件无效")
                     fields["filename"] = filename
                     fields["content"] = content
-                elif name in {"fns_config", "target_dir"}:
-                    content = part.get_payload(decode=True)
-                    try:
-                        fields[name] = (content or b"").decode("utf-8")
-                    except UnicodeDecodeError as error:
-                        raise ClipError("validate", "附件表单编码无效") from error
+                    fields["mime"] = part.get_content_type()
             return fields
 
         def _file_response(self, file_path: Path) -> None:
@@ -239,7 +174,7 @@ def make_handler(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="启动微信公众号转存本地调试页")
+    parser = argparse.ArgumentParser(description="启动微信公众号抓取本地调试页")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--allow-network", action="store_true")

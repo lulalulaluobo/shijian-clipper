@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>公众号转存 / 本地调试台</title>
+  <title>公众号抓取 / 本地调试台</title>
   <style>
     :root {
       --ink: #1c211d;
@@ -60,7 +60,7 @@
       background: #fff;
       font: 1rem/1.5 "SFMono-Regular", Consolas, monospace;
     }
-    textarea { min-height: 150px; resize: vertical; }
+    textarea { min-height: 320px; resize: vertical; }
     input:focus, textarea:focus { outline: 3px solid #b8d7c5; outline-offset: 2px; }
     .field-note { color: var(--muted); font-size: .68rem; line-height: 1.5; margin: 9px 0 0; }
 
@@ -84,6 +84,7 @@
     #result.error { border-left: 6px solid var(--alert); }
     .status-label { font-size: .7rem; font-weight: 700; color: var(--muted); }
     #result-message { margin: 8px 0 0; line-height: 1.6; white-space: pre-wrap; }
+    #markdown-output { white-space: pre-wrap; word-break: break-word; }
 
     @media (max-width: 600px) {
       main { padding-top: 32px; }
@@ -93,91 +94,76 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">Local / FNS Debugger</div>
-    <h1>把一篇公众号文章，送进你的笔记库。</h1>
-    <p class="lede">粘贴 Fast Note Sync 管理面板复制的 API 配置。配置只用于当前一次请求，刷新页面后不会保留。</p>
+    <div class="eyebrow">Local / Article Clipper</div>
+    <h1>抓一篇公众号文章，本地预览 Markdown。</h1>
+    <p class="lede">输入文章链接即可抓取并转换 Markdown，结果仅在本页显示，不会写入任何后端。</p>
 
     <form id="clip-form" autocomplete="off">
-      <section class="section">
-        <label for="fns-config">FNS API 配置 JSON</label>
-        <textarea id="fns-config" required spellcheck="false" autocapitalize="off" placeholder='{"api":"https://sync.example.com","apiToken":"…","vault":"MyVault"}'></textarea>
-        <p class="field-note">读取 api、apiToken、vault；wsApi 不参与本次写入。</p>
-      </section>
-
       <section class="section">
         <label for="article-url">微信公众号文章链接</label>
         <input id="article-url" type="url" required inputmode="url" autocapitalize="off" placeholder="https://mp.weixin.qq.com/s/...">
       </section>
 
-      <section class="section grid">
-        <div>
-          <label for="target-dir">目标目录</label>
-          <input id="target-dir" required value="00_Inbox/微信公众号">
-        </div>
-        <div style="align-self:end">
-          <button id="submit-button" type="submit">开始转存</button>
-        </div>
+      <section class="section">
+        <button id="submit-button" type="submit">开始抓取</button>
       </section>
     </form>
 
     <section id="result" aria-live="polite" aria-atomic="true">
       <div id="result-label" class="status-label"></div>
       <p id="result-message"></p>
+      <textarea id="markdown-output" readonly style="display:none; margin-top:16px;"></textarea>
     </section>
   </main>
 
   <script>
     const form = document.getElementById("clip-form");
-    const configInput = document.getElementById("fns-config");
     const urlInput = document.getElementById("article-url");
-    const directoryInput = document.getElementById("target-dir");
     const submitButton = document.getElementById("submit-button");
     const result = document.getElementById("result");
     const resultLabel = document.getElementById("result-label");
     const resultMessage = document.getElementById("result-message");
+    const markdownOutput = document.getElementById("markdown-output");
 
     function showResult(kind, label, message) {
       result.className = `visible ${kind}`;
       resultLabel.textContent = label;
       resultMessage.textContent = message;
+      if (kind !== "success") markdownOutput.style.display = "none";
     }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      let fnsConfig;
-      try {
-        fnsConfig = JSON.parse(configInput.value);
-        if (!fnsConfig.api || !fnsConfig.apiToken || !fnsConfig.vault) {
-          throw new Error("配置中需要 api、apiToken 和 vault 字段。");
-        }
-      } catch (error) {
-        showResult("error", "配置错误", error.message || "FNS 配置不是有效 JSON。");
+      if (!urlInput.value.trim()) {
+        showResult("error", "配置错误", "请输入公众号文章链接。");
         return;
       }
 
       submitButton.disabled = true;
       submitButton.textContent = "正在处理…";
-      showResult("success", "处理中", "抓取文章、转换 Markdown 并写入 Fast Note Sync。");
+      showResult("success", "处理中", "抓取文章并转换为 Markdown。");
       try {
         const response = await fetch("/api/clip", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: urlInput.value,
-            target_dir: directoryInput.value,
-            fns_config: fnsConfig,
-          }),
+          body: JSON.stringify({ url: urlInput.value }),
         });
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(`[${payload.stage || "request"}] ${payload.message || "转存失败"}`);
+          throw new Error(`[${payload.stage || "request"}] ${payload.message || "抓取失败"}`);
         }
-        showResult("success", "已写入", `${payload.title}\n${payload.path}\n图片：${payload.image_count} 张（保留原链接）`);
+        markdownOutput.style.display = "block";
+        markdownOutput.value = payload.markdown || "";
+        showResult(
+          "success",
+          "已抓取",
+          `${payload.title}\n${payload.source_url}\n图片：${payload.image_count} 张（保留原链接）`,
+        );
       } catch (error) {
-        showResult("error", "转存失败", error.message || "请求失败，请检查本地服务和网络。");
+        showResult("error", "抓取失败", error.message || "请求失败，请检查本地服务和网络。");
       } finally {
         submitButton.disabled = false;
-        submitButton.textContent = "开始转存";
+        submitButton.textContent = "开始抓取";
       }
     });
   </script>
