@@ -54,22 +54,31 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = intent?.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-        sharedUrl = extractWechatUrl(text)
-        sharedFileUri = if (sharedUrl == null && intent?.action == Intent.ACTION_SEND) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-        } else null
+        handleIntent(intent)
         setContent { AppTheme { ClipperApp(sharedUrl, sharedFileUri, { sharedUrl = null }, { sharedFileUri = null }) } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-        sharedUrl = extractWechatUrl(text)
-        sharedFileUri = if (sharedUrl == null && intent.action == Intent.ACTION_SEND) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-        } else null
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND) {
+            val streamUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            if (streamUri != null) {
+                sharedFileUri = streamUri
+                sharedUrl = null
+            } else {
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+                sharedUrl = extractWechatUrl(text)
+                sharedFileUri = null
+            }
+        } else {
+            sharedUrl = null
+            sharedFileUri = null
+        }
     }
 }
 
