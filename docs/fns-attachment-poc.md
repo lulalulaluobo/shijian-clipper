@@ -2,6 +2,14 @@
 
 此 PoC 只验证 FNS 附件上传与拾笺 VPS 暂存清理，不开放 Android 上传接口，也不会写入 PocketBase 任务记录。
 
+## 本地 H5 调试页
+
+```sh
+python -m poc.server
+```
+
+打开 `http://127.0.0.1:8765/attachment.html`。页面仅监听本机、不使用浏览器存储，单文件限制为 20 MiB；成功后会显示 FNS 路径与暂存清理状态。
+
 ## 前提
 
 - FNS Service 需支持 `POST /api/file` 的 multipart 上传接口。

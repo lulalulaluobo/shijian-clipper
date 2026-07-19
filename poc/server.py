@@ -1,17 +1,25 @@
 import argparse
 import json
+import os
+import tempfile
+from email.parser import BytesParser
+from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from backend.app.fns_attachment import upload_staged_attachment
 from backend.app.safe_http import UnsafeUrlError, normalize_https_root_url, request_public_json
 from poc.clip import run
-from poc.fns import FnsConfig
+from poc.fns import FnsConfig, _safe_filename
 from poc.wechat import ClipError, fetch_wechat_article
 
 
 MAX_REQUEST_BYTES = 64 * 1024
+MAX_ATTACHMENT_REQUEST_BYTES = 20 * 1024 * 1024
 INDEX_PATH = Path(__file__).with_name("web") / "index.html"
+ATTACHMENT_INDEX_PATH = Path(__file__).with_name("web") / "attachment.html"
+ATTACHMENT_STAGING_DIR = Path(tempfile.gettempdir()) / "shijian-fns-h5-poc"
 def parse_fns_config(value: object, target_dir: object) -> FnsConfig:
     if not isinstance(value, dict):
         raise ClipError("validate", "FNS 配置必须是 JSON 对象")
@@ -43,6 +51,35 @@ def run_payload(
     return run(url, config, fetch, post)
 
 
+def run_attachment_payload(
+    payload: object,
+    upload: Callable[[FnsConfig, Path, str], str] = upload_staged_attachment,
+) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise ClipError("validate", "附件请求无效")
+    raw_config = payload.get("fns_config")
+    target_dir = payload.get("target_dir")
+    filename = payload.get("filename")
+    content = payload.get("content")
+    if not isinstance(raw_config, str):
+        raise ClipError("validate", "缺少 FNS 配置")
+    if not isinstance(filename, str) or not filename or not isinstance(content, bytes):
+        raise ClipError("validate", "缺少附件文件")
+    try:
+        config_value = json.loads(raw_config)
+    except json.JSONDecodeError as error:
+        raise ClipError("validate", "FNS 配置不是有效 JSON") from error
+    config = parse_fns_config(config_value, target_dir)
+    target_path = f"{config.target_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
+    ATTACHMENT_STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    descriptor, raw_path = tempfile.mkstemp(prefix="attachment-", suffix=Path(filename).suffix, dir=ATTACHMENT_STAGING_DIR)
+    staged_file = Path(raw_path)
+    with os.fdopen(descriptor, "wb") as file:
+        file.write(content)
+    path = upload(config, staged_file, target_path)
+    return {"path": path, "staging_cleaned": not staged_file.exists()}
+
+
 def _fetch(source_url: str, timeout: int = 30) -> str:
     return fetch_wechat_article(source_url, timeout=timeout)
 
@@ -70,28 +107,47 @@ def is_loopback_host(host: str) -> bool:
 def make_handler(
     fetch: Callable[[str], str] = _fetch,
     post: Callable[[str, dict[str, str], dict[str, str]], dict[str, object]] = _post,
+    upload: Callable[[FnsConfig, Path, str], str] = upload_staged_attachment,
 ) -> type[BaseHTTPRequestHandler]:
     class ClipHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            if self.path not in {"/", "/index.html"}:
-                self._json_response(404, {"stage": "request", "message": "未找到页面"})
+            if self.path in {"/", "/index.html"}:
+                self._file_response(INDEX_PATH)
                 return
-            self._file_response()
+            if self.path == "/attachment.html":
+                self._file_response(ATTACHMENT_INDEX_PATH)
+                return
+            else:
+                self._json_response(404, {"stage": "request", "message": "未找到页面"})
+            return
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path != "/api/clip":
+            if self.path == "/api/clip":
+                try:
+                    payload = self._read_json_body()
+                    result = run_payload(payload, fetch, post)
+                except ClipError as error:
+                    self._json_response(400, {"stage": error.stage, "message": str(error)})
+                    return
+                except Exception:
+                    self._json_response(500, {"stage": "request", "message": "请求处理失败"})
+                    return
+                self._json_response(200, result)
+                return
+            if self.path == "/api/attachment":
+                try:
+                    result = run_attachment_payload(self._read_multipart_body(), upload)
+                except ClipError as error:
+                    self._json_response(400, {"stage": error.stage, "message": str(error)})
+                    return
+                except Exception:
+                    self._json_response(500, {"stage": "request", "message": "附件请求处理失败"})
+                    return
+                self._json_response(200, result)
+                return
+            else:
                 self._json_response(404, {"stage": "request", "message": "未找到接口"})
                 return
-            try:
-                payload = self._read_json_body()
-                result = run_payload(payload, fetch, post)
-            except ClipError as error:
-                self._json_response(400, {"stage": error.stage, "message": str(error)})
-                return
-            except Exception:
-                self._json_response(500, {"stage": "request", "message": "请求处理失败"})
-                return
-            self._json_response(200, result)
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -108,9 +164,40 @@ def make_handler(
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ClipError("validate", "请求体必须是 JSON") from error
 
-        def _file_response(self) -> None:
+        def _read_multipart_body(self) -> dict[str, object]:
             try:
-                content = INDEX_PATH.read_bytes()
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError as error:
+                raise ClipError("validate", "请求体长度无效") from error
+            content_type = self.headers.get("Content-Type", "")
+            if size <= 0 or size > MAX_ATTACHMENT_REQUEST_BYTES or not content_type.startswith("multipart/form-data"):
+                raise ClipError("validate", "附件请求大小或格式无效")
+            message = BytesParser(policy=default).parsebytes(
+                f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode() + self.rfile.read(size)
+            )
+            if not message.is_multipart():
+                raise ClipError("validate", "附件请求格式无效")
+            fields: dict[str, object] = {}
+            for part in message.iter_parts():
+                name = part.get_param("name", header="content-disposition")
+                if name == "file":
+                    filename = part.get_filename()
+                    content = part.get_payload(decode=True)
+                    if not isinstance(filename, str) or not isinstance(content, bytes):
+                        raise ClipError("validate", "附件文件无效")
+                    fields["filename"] = filename
+                    fields["content"] = content
+                elif name in {"fns_config", "target_dir"}:
+                    content = part.get_payload(decode=True)
+                    try:
+                        fields[name] = (content or b"").decode("utf-8")
+                    except UnicodeDecodeError as error:
+                        raise ClipError("validate", "附件表单编码无效") from error
+            return fields
+
+        def _file_response(self, file_path: Path) -> None:
+            try:
+                content = file_path.read_bytes()
             except OSError:
                 self._json_response(500, {"stage": "request", "message": "调试页面不可用"})
                 return

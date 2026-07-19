@@ -71,9 +71,9 @@ class LocalHttpServerTests(unittest.TestCase):
         self.thread.join()
         self.server.server_close()
 
-    def _request(self, method: str, path: str, body: bytes | None = None):
+    def _request(self, method: str, path: str, body: bytes | None = None, headers: dict[str, str] | None = None):
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
-        connection.request(method, path, body, {"Content-Type": "application/json"})
+        connection.request(method, path, body, headers or {"Content-Type": "application/json"})
         response = connection.getresponse()
         content = response.read()
         connection.close()
@@ -103,6 +103,49 @@ class LocalHttpServerTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(content)["stage"], "validate")
         self.assertNotIn(b"do-not-echo", content)
+
+    def test_attachment_page_is_served(self):
+        status, content = self._request("GET", "/attachment.html")
+
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="attachment-form"', content)
+
+    def test_attachment_endpoint_writes_to_fns_and_reports_cleanup(self):
+        captured = {}
+
+        def upload(config, staged_file, target_path):
+            captured.update(config=config, target_path=target_path)
+            self.assertEqual(staged_file.read_bytes(), b"pdf-content")
+            staged_file.unlink()
+            return target_path
+
+        self.server.shutdown()
+        self.thread.join()
+        self.server.server_close()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(upload=upload))
+        self.thread = threading.Thread(target=self.server.serve_forever)
+        self.thread.start()
+
+        boundary = "----ShijianTest"
+        body = (
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"fns_config\"\r\n\r\n"
+            '{"api":"https://fns.example","apiToken":"secret","vault":"obsidian"}\r\n'
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"target_dir\"\r\n\r\n00_Inbox/附件/PoC\r\n"
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"report.pdf\"\r\n"
+            "Content-Type: application/pdf\r\n\r\n"
+        ).encode() + b"pdf-content" + f"\r\n--{boundary}--\r\n".encode()
+
+        status, content = self._request(
+            "POST",
+            "/api/attachment",
+            body,
+            {"Content-Type": f"multipart/form-data; boundary={boundary}", "Content-Length": str(len(body))},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(content), {"path": "00_Inbox/附件/PoC/report.pdf", "staging_cleaned": True})
+        self.assertEqual(captured["config"].vault, "obsidian")
+        self.assertEqual(captured["target_path"], "00_Inbox/附件/PoC/report.pdf")
 
 
 class WechatFetchTests(unittest.TestCase):
