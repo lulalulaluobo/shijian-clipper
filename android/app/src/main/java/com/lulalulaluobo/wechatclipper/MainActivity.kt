@@ -132,7 +132,7 @@ private fun AuthScreen(serverUrl: String, onAuthenticated: (Session) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("转存助手") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("拾笺") }) }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -234,7 +234,7 @@ private fun ChatScreen(session: Session, sharedUrl: String?, onSharedHandled: ()
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("转存助手") },
+                title = { Text("拾笺") },
                 actions = { TextButton(onClick = onOpenSettings) { Text("设置") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -363,7 +363,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
                                     Intent.createChooser(
                                         Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, "邀请你使用转存助手。\n服务地址：${session.baseUrl}\n邀请码：$inviteCode")
+                                            putExtra(Intent.EXTRA_TEXT, "邀请你使用拾笺。\n服务地址：${session.baseUrl}\n邀请码：$inviteCode")
                                         },
                                         "分享邀请码",
                                     ),

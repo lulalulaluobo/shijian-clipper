@@ -10,6 +10,9 @@ references/
 android/.gradle/
 android/build/
 android/app/build/
+android/local.properties
+*.hprof
+docs/superpowers/
 __pycache__/
 *.db-shm
 *.db-wal

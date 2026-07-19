@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:theme="@style/Theme.WechatClipper" android:label="转存助手">
+    <application
+        android:icon="@mipmap/shijian_icon"
+        android:label="拾笺"
+        android:roundIcon="@mipmap/shijian_icon"
+        android:theme="@style/Theme.WechatClipper">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
