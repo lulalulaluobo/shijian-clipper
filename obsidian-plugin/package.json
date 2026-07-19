@@ -1,0 +1,26 @@
+{
+  "name": "shijian-sync",
+  "version": "0.3.0",
+  "description": "从拾笺后端同步微信公众号文章和附件到 Obsidian",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "shijian",
+    "wechat",
+    "sync"
+  ],
+  "author": "lulalulaluobo",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.2",
+    "obsidian": "^1.4.11",
+    "typescript": "^5.4.5"
+  }
+}

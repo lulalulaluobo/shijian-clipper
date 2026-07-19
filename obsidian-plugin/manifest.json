@@ -1,0 +1,9 @@
+{
+  "id": "shijian-sync",
+  "name": "拾笺同步",
+  "version": "0.3.0",
+  "minAppVersion": "1.4.0",
+  "description": "从拾笺后端同步微信公众号文章和附件到 Obsidian",
+  "author": "lulalulaluobo",
+  "isDesktopOnly": false
+}
