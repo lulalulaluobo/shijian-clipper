@@ -6,6 +6,7 @@ dist/
 references/
 .worktrees/
 .superpowers/
+.venv/
 __pycache__/
 *.db-shm
 *.db-wal

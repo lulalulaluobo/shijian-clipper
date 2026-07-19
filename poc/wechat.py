@@ -1,6 +1,20 @@
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+
+WECHAT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 
 class ClipError(Exception):
@@ -27,6 +41,13 @@ def validate_wechat_url(url: str) -> str:
     ):
         raise ClipError("validate", "仅支持 HTTPS 微信公众号文章链接")
     return normalized
+
+
+def fetch_wechat_article(source_url: str, timeout: int = 30, opener=None) -> str:
+    request = Request(source_url, headers=WECHAT_HEADERS)
+    open_request = opener or urlopen
+    with open_request(request, timeout=timeout) as response:
+        return response.read().decode("utf-8")
 
 
 class _ArticleParser(HTMLParser):

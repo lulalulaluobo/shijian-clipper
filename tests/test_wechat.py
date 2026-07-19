@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
-from poc.wechat import ClipError, extract_article, validate_wechat_url
+from poc.wechat import ClipError, extract_article, fetch_wechat_article, validate_wechat_url
 
 
 class ValidateWechatUrlTests(unittest.TestCase):
@@ -44,3 +45,18 @@ class ExtractArticleTests(unittest.TestCase):
             article.content_html,
             '<p>正文</p><img data-src="https://mmbiz.qpic.cn/a.jpg">',
         )
+
+
+class FetchWechatArticleTests(unittest.TestCase):
+    @patch("poc.wechat.urlopen")
+    def test_uses_browser_headers_required_by_wechat(self, urlopen):
+        response = MagicMock()
+        response.read.return_value = b"<html></html>"
+        urlopen.return_value.__enter__.return_value = response
+
+        self.assertEqual(fetch_wechat_article("https://mp.weixin.qq.com/s/example"), "<html></html>")
+
+        request = urlopen.call_args.args[0]
+        headers = {key.lower(): value for key, value in request.header_items()}
+        self.assertEqual(headers["accept-language"], "zh-CN,zh;q=0.9,en;q=0.8")
+        self.assertEqual(headers["upgrade-insecure-requests"], "1")
