@@ -1,0 +1,9 @@
+# standard ignores
+.gemini/
+.obsidian/workspace.json
+node_modules/
+dist/
+references/
+*.db-shm
+*.db-wal
+*.log
