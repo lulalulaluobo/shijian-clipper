@@ -5,6 +5,7 @@ from threading import Lock
 from backend.app.crypto import encrypt_token
 from backend.app.errors import ApiError
 from backend.app.fns import parse_fns_json
+from poc.wechat import validate_wechat_url
 
 
 class ClipService:
@@ -63,6 +64,16 @@ class ClipService:
         if not records:
             return {"configured": False, "token_saved": False}
         return self._settings_summary(records[0])
+
+    def create_clip(self, user_id: str, url: str) -> dict:
+        source_url = validate_wechat_url(url)
+        if not self.pocketbase.list_records("fns_settings", f'user = "{user_id}"'):
+            raise ApiError("请先配置 Fast Note Sync", 400)
+        task = self.pocketbase.create_record(
+            "clip_tasks",
+            {"user": user_id, "source_url": source_url, "status": "queued"},
+        )
+        return {"id": task["id"], "status": "queued", "source_url": source_url}
 
     @staticmethod
     def _settings_summary(record: dict) -> dict:
