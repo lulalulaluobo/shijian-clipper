@@ -47,3 +47,26 @@ def test_vps_compose_publishes_only_loopback_ports_without_host_network():
     assert "network_mode: host" not in compose
     assert '"127.0.0.1:18080:8000"' in compose
     assert '"127.0.0.1:18081:8090"' in compose
+
+
+def test_notes_migration_creates_collection_with_required_fields():
+    migration = (ROOT / "deploy/pocketbase/pb_migrations/1710000005_create_notes_table.js").read_text()
+
+    assert 'name: "notes"' in migration
+    assert '{ name: "user", type: "relation", required: true, collectionId: users.id' in migration
+    assert '{ name: "source_url", type: "url", required: true }' in migration
+    assert '{ name: "title", type: "text", required: true }' in migration
+    assert '{ name: "filename", type: "text", required: true }' in migration
+    assert '{ name: "content_md", type: "text" }' in migration
+    assert '{ name: "images", type: "json" }' in migration
+    assert 'values: ["article", "attachment"]' in migration
+    assert '{ name: "attachment_b64", type: "text" }' in migration
+    assert '{ name: "delivered", type: "bool", required: true }' in migration
+    assert "idx_notes_user_delivered ON notes (user, delivered, created)" in migration
+
+
+def test_drop_fns_settings_migration_deletes_collection():
+    migration = (ROOT / "deploy/pocketbase/pb_migrations/1710000006_drop_fns_settings.js").read_text()
+
+    assert 'app.findCollectionByNameOrId("fns_settings")' in migration
+    assert 'app.delete(' in migration
