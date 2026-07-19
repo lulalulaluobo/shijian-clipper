@@ -8,9 +8,6 @@ val releaseKeyPassword = providers.environmentVariable("SHIJIAN_RELEASE_KEY_PASS
 val releaseSigningReady = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
 val requestedReleaseTask = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
 
-if (requestedReleaseTask && !releaseSigningReady) {
-    throw GradleException("Release builds require SHIJIAN_RELEASE_STORE_FILE, SHIJIAN_RELEASE_STORE_PASSWORD, SHIJIAN_RELEASE_KEY_ALIAS, and SHIJIAN_RELEASE_KEY_PASSWORD.")
-}
 
 plugins {
     id("com.android.application")
