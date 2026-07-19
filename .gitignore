@@ -6,6 +6,7 @@ dist/
 references/
 .worktrees/
 .superpowers/
+.trellis/
 .venv/
 android/.gradle/
 android/build/
