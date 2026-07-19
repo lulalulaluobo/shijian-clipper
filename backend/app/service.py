@@ -2,10 +2,11 @@ import hashlib
 from datetime import UTC, datetime
 from threading import Lock
 
-from backend.app.crypto import encrypt_token
+from backend.app.crypto import decrypt_token, encrypt_token
 from backend.app.errors import ApiError
 from backend.app.fns import parse_fns_json
-from poc.wechat import validate_wechat_url
+from poc.fns import FnsConfig
+from poc.wechat import ClipError, validate_wechat_url
 
 
 class ClipService:
@@ -74,6 +75,41 @@ class ClipService:
             {"user": user_id, "source_url": source_url, "status": "queued"},
         )
         return {"id": task["id"], "status": "queued", "source_url": source_url}
+
+    def claim_next_task(self) -> dict | None:
+        tasks = self.pocketbase.list_records("clip_tasks", 'status = "queued"')
+        if not tasks:
+            return None
+        task = tasks[0]
+        return self.pocketbase.update_record("clip_tasks", task["id"], {"status": "processing"})
+
+    def decrypt_fns_config(self, user_id: str) -> FnsConfig:
+        if not self.fns_encryption_key:
+            raise ApiError("FNS 加密未配置", 500)
+        records = self.pocketbase.list_records("fns_settings", f'user = "{user_id}"')
+        if not records:
+            raise ClipError("fns", "请先配置 Fast Note Sync")
+        record = records[0]
+        return FnsConfig(
+            record["base_url"],
+            decrypt_token(record["token_ciphertext"], self.fns_encryption_key),
+            record["vault"],
+            record["target_dir"],
+        )
+
+    def finish_task(self, task_id: str, result: dict) -> None:
+        self.pocketbase.update_record(
+            "clip_tasks",
+            task_id,
+            {"status": "succeeded", "title": result.get("title", ""), "path": result.get("path", "")},
+        )
+
+    def fail_task(self, task_id: str, error: ClipError) -> None:
+        self.pocketbase.update_record(
+            "clip_tasks",
+            task_id,
+            {"status": "failed", "error_stage": error.stage, "error_message": str(error)},
+        )
 
     @staticmethod
     def _settings_summary(record: dict) -> dict:
