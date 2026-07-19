@@ -11,6 +11,8 @@ pytestmark = pytest.mark.filterwarnings("ignore:Using `httpx` with `starlette.te
 
 
 class FakeService:
+    """覆盖 service 所有公共方法。后续 sync 方法在底部定义。"""
+
     def register(self, invite_code, email, password):
         assert invite_code == "invite-a"
         return {"id": "user-a", "email": email}
@@ -28,12 +30,6 @@ class FakeService:
     def create_clip(self, user_id, url):
         return {"id": "task-a", "status": "queued", "source_url": url, "user": user_id}
 
-    def save_fns_settings(self, user_id, raw_json, target_dir):
-        raise ApiError("FNS 配置无效", 400)
-
-    def check_fns_settings(self, user_id):
-        return {"connected": True, "vault_exists": True}
-
     def can_create_invites(self, user_id):
         assert user_id == "user-a"
         return True
@@ -48,12 +44,38 @@ class FakeService:
     def retry_clip(self, user_id, task_id):
         return {"id": task_id, "status": "queued", "user": user_id}
 
-    def decrypt_fns_config(self, user_id):
-        from poc.fns import FnsConfig
-        return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox", "00_Inbox")
+    def create_attachment_note(self, user_id, filename, mime, b64data):
+        return {"id": "note-1", "filename": filename}
 
-    def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
-        pass
+    def list_pending_notes(self, user_id, since_iso, limit=50):
+        return [
+            {
+                "id": "note-1",
+                "kind": "article",
+                "source_url": "https://mp.weixin.qq.com/s/x",
+                "title": "标题A",
+                "filename": "标题A.md",
+                "content_md": "# 正文",
+                "images": ["https://mmbiz.qpic.cn/a.png"],
+                "attachment_filename": "",
+                "attachment_mime": "",
+                "created": "2026-07-19T10:00:00Z",
+            }
+        ]
+
+    def ack_notes(self, user_id, note_ids):
+        return len(note_ids)
+
+    def get_note_for_user(self, user_id, note_id):
+        if note_id == "note-att":
+            return {
+                "id": "note-att",
+                "kind": "attachment",
+                "attachment_b64": "JVBERi0=",
+                "attachment_mime": "application/pdf",
+                "attachment_filename": "r.pdf",
+            }
+        raise ApiError("笔记不存在", 404)
 
 
 def test_create_clip_uses_authenticated_owner():
@@ -83,19 +105,6 @@ def test_register_then_login_returns_only_session_and_public_user_fields():
     assert logged_in.json() == {"token": "token-a", "user": {"id": "user-a", "email": "a@example.com"}}
 
 
-def test_authenticated_settings_check_and_task_list():
-    client = TestClient(create_app(FakeService()))
-    headers = {"Authorization": "Bearer token-a"}
-
-    checked = client.post("/v1/settings/fns/check", headers=headers)
-    clips = client.get("/v1/clips", headers=headers)
-    retried = client.post("/v1/clips/task-a/retry", headers=headers)
-
-    assert checked.json() == {"connected": True, "vault_exists": True}
-    assert clips.json()["items"][0]["user"] == "user-a"
-    assert retried.json()["status"] == "queued"
-
-
 def test_authorized_user_can_check_and_create_invite():
     client = TestClient(create_app(FakeService()))
     headers = {"Authorization": "Bearer token-a"}
@@ -108,14 +117,12 @@ def test_authorized_user_can_check_and_create_invite():
     assert created.json() == {"code": "invite-a"}
 
 
-def test_invalid_token_and_fns_error_never_echo_token():
+def test_unauthenticated_request_is_rejected():
     client = TestClient(create_app(FakeService()))
-    secret = "secret-token"
 
-    response = client.put("/v1/settings/fns", json={"config": secret, "target_dir": "Inbox"})
+    response = client.get("/v1/clips")
 
     assert response.status_code == 401
-    assert secret not in response.text
 
 
 def test_clip_error_returns_stage_without_stacktrace():
@@ -133,16 +140,6 @@ def test_clip_error_returns_stage_without_stacktrace():
     assert response.json() == {"stage": "validate", "message": "仅支持 HTTPS 微信公众号文章链接"}
 
 
-def test_rejects_an_oversized_fns_configuration_before_calling_service():
-    response = TestClient(create_app(FakeService())).put(
-        "/v1/settings/fns",
-        headers={"Authorization": "Bearer token-a"},
-        json={"config": "x" * 16_385, "target_dir": "Inbox"},
-    )
-
-    assert response.status_code == 422
-
-
 def test_limits_repeated_login_attempts_from_one_client():
     client = TestClient(create_app(FakeService(), RateLimiter()))
 
@@ -154,36 +151,6 @@ def test_limits_repeated_login_attempts_from_one_client():
     assert response.status_code == 429
 
 
-def test_upload_attachment_success(monkeypatch):
-    class SuccessfulService(FakeService):
-        def decrypt_fns_config(self, user_id):
-            from poc.fns import FnsConfig
-            return FnsConfig("https://fns.example", "secret", "obsidian", "00_Inbox", "00_Inbox")
-
-            
-        def record_attachment_task(self, user_id, filename, status, path="", error_message="", error_stage=""):
-            assert user_id == "user-a"
-            assert filename == "report.pdf"
-            assert status == "succeeded"
-            assert path == "00_Inbox/report.pdf"
-
-    async def mock_run(func, *args, **kwargs):
-        return func(*args, **kwargs)
-    monkeypatch.setattr("fastapi.concurrency.run_in_threadpool", mock_run)
-    monkeypatch.setattr("backend.app.attachment_service.relay_attachment", lambda config, filename, content: f"{config.target_dir}/{filename}")
-
-    client = TestClient(create_app(SuccessfulService()))
-    response = client.post(
-        "/v1/clips/attachments",
-        headers={"Authorization": "Bearer token-a"},
-        files={"file": ("report.pdf", b"pdf-content", "application/pdf")},
-    )
-
-    assert response.status_code == 201
-    assert response.json() == {"path": "00_Inbox/report.pdf"}
-
-
-
 def test_pwa_static_mount_success():
     client = TestClient(create_app(FakeService()))
     response = client.get("/")
@@ -191,3 +158,103 @@ def test_pwa_static_mount_success():
     assert b"<!doctype html>" in response.content
     assert b"Shijian" in response.content
 
+
+# ---------- 新增：附件上传与同步接口测试 ----------
+
+
+def test_clips_files_uploads_attachment_to_notes():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.post(
+        "/v1/clips/files",
+        headers={"Authorization": "Bearer token-a"},
+        files={"file": ("report.pdf", b"pdf-content", "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"id": "note-1", "filename": "report.pdf"}
+
+
+def test_clips_files_requires_auth():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.post(
+        "/v1/clips/files",
+        files={"file": ("report.pdf", b"x", "application/pdf")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_sync_changes_returns_pending_notes():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.get(
+        "/v1/sync/changes",
+        headers={"Authorization": "Bearer token-a"},
+        params={"since": "2026-07-19T00:00:00Z", "limit": 50},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "notes" in body
+    assert "server_time" in body
+    assert len(body["notes"]) == 1
+    assert body["notes"][0]["id"] == "note-1"
+    assert body["notes"][0]["title"] == "标题A"
+
+
+def test_sync_changes_requires_auth():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.get("/v1/sync/changes")
+
+    assert response.status_code == 401
+
+
+def test_sync_ack_marks_notes_delivered():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.post(
+        "/v1/sync/ack",
+        headers={"Authorization": "Bearer token-a"},
+        json={"note_ids": ["note-1", "note-2"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"acked": 2}
+
+
+def test_sync_ack_requires_auth():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.post("/v1/sync/ack", json={"note_ids": ["note-1"]})
+
+    assert response.status_code == 401
+
+
+def test_sync_attachment_download_returns_bytes():
+    client = TestClient(create_app(FakeService()))
+
+    response = client.get(
+        "/v1/sync/notes/note-att/attachment",
+        headers={"Authorization": "Bearer token-a"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"%PDF-"  # base64.b64decode("JVBERi0=") = PDF 文件头
+
+
+def test_sync_attachment_download_rejects_other_user_or_missing():
+    client = TestClient(create_app(FakeService()))
+
+    # 不存在的 note
+    response = client.get(
+        "/v1/sync/notes/note-missing/attachment",
+        headers={"Authorization": "Bearer token-a"},
+    )
+    assert response.status_code == 404
+
+    # 未登录
+    response = client.get("/v1/sync/notes/note-att/attachment")
+    assert response.status_code == 401

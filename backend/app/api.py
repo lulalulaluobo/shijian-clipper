@@ -1,7 +1,9 @@
+import base64
+from datetime import UTC, datetime
 from hashlib import sha256
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, File, UploadFile, Form
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, File, UploadFile
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -10,15 +12,11 @@ from backend.app.rate_limit import RateLimiter
 from poc.wechat import ClipError
 
 
+MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MiB
+
+
 class ClipRequest(BaseModel):
     url: str = Field(min_length=1, max_length=2048)
-
-
-class FnsSettingsRequest(BaseModel):
-    config: str | None = Field(default=None, max_length=16_384)
-    target_dir: str = Field(min_length=1, max_length=512)
-    attachment_dir: str | None = Field(default=None, max_length=512)
-
 
 
 class RegisterRequest(BaseModel):
@@ -32,6 +30,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class AckRequest(BaseModel):
+    note_ids: list[str] = Field(min_length=0, max_length=200)
+
+
 def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     app = FastAPI()
     limiter = rate_limiter or RateLimiter()
@@ -40,15 +42,18 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     async def limit_requests(request: Request, call_next):
         content_length = request.headers.get("content-length")
         if content_length and content_length.isdigit():
-            limit = 20 * 1024 * 1024 if request.url.path == "/v1/clips/attachments" else 20_480
+            limit = MAX_ATTACHMENT_BYTES if request.url.path == "/v1/clips/files" else 20_480
             if int(content_length) > limit:
                 return JSONResponse(status_code=413, content={"message": "请求体过大"})
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").rsplit(",", 1)[-1].strip()
         path = request.url.path
         if path in {"/v1/auth/login", "/v1/auth/register"}:
             key, limit, window = f"auth:{client_ip}", 10, 300
+        elif path.startswith("/v1/sync/"):
+            token = request.headers.get("authorization", "")
+            key, limit, window = f"sync:{sha256(token.encode()).hexdigest()}", 30, 60
         elif request.method == "POST" and (
-            path in {"/v1/settings/fns/check", "/v1/clips", "/v1/clips/attachments"} or path.endswith("/retry")
+            path in {"/v1/clips", "/v1/clips/files"} or path.endswith("/retry")
         ):
             token = request.headers.get("authorization", "")
             key, limit, window = f"work:{sha256(token.encode()).hexdigest()}", 20, 60
@@ -91,19 +96,6 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     def create_invite(user_id: str = Depends(require_user)):
         return service.create_invite(user_id)
 
-    @app.get("/v1/settings/fns")
-    def get_fns_settings(user_id: str = Depends(require_user)):
-        return service.get_fns_settings(user_id)
-
-    @app.put("/v1/settings/fns")
-    def save_fns_settings(payload: FnsSettingsRequest, user_id: str = Depends(require_user)):
-        return service.save_fns_settings(user_id, payload.config, payload.target_dir, payload.attachment_dir)
-
-
-    @app.post("/v1/settings/fns/check")
-    def check_fns_settings(user_id: str = Depends(require_user)):
-        return service.check_fns_settings(user_id)
-
     @app.post("/v1/clips", status_code=201)
     def create_clip(payload: ClipRequest, user_id: str = Depends(require_user)):
         return service.create_clip(user_id, payload.url)
@@ -116,63 +108,63 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     def retry_clip(task_id: str, user_id: str = Depends(require_user)):
         return service.retry_clip(user_id, task_id)
 
-    @app.post("/v1/clips/attachments", status_code=201)
-    async def upload_attachment(
+    @app.post("/v1/clips/files", status_code=201)
+    async def upload_file(
         file: UploadFile = File(...),
-        target_path: str | None = Form(default=None),
         user_id: str = Depends(require_user),
     ):
-        config = service.decrypt_fns_config(user_id)
+        """客户端直传附件，文件字节 base64 编码存 notes 表（kind=attachment），等插件拉取。"""
         content = await file.read()
-        
-        from backend.app.attachment_service import relay_attachment
-        from poc.fns import _safe_filename, FnsConfig
-        from pathlib import Path
-        from fastapi.concurrency import run_in_threadpool
-        
+        if not content:
+            raise HTTPException(400, "文件内容不能为空")
+        if len(content) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(413, "文件过大")
         filename = file.filename or "attachment"
-        if target_path:
-            final_path = target_path
-        else:
-            final_path = f"{config.attachment_dir.strip('/\\')}/{_safe_filename(Path(filename).name)}"
+        mime = file.content_type or "application/octet-stream"
+        b64data = base64.b64encode(content).decode("ascii")
+        return service.create_attachment_note(user_id, filename, mime, b64data)
 
-            
-        target_p = Path(final_path)
-        config_for_upload = FnsConfig(
-            config.base_url,
-            config.token,
-            config.vault,
-            str(target_p.parent)
-        )
-        
-        try:
-            saved_path = await run_in_threadpool(
-                relay_attachment,
-                config_for_upload,
-                target_p.name,
-                content
-            )
-            service.record_attachment_task(user_id, filename, "succeeded", saved_path)
-            return {"path": saved_path}
-        except ClipError as error:
-            service.record_attachment_task(
-                user_id, filename, "failed", 
-                error_message=str(error), 
-                error_stage=error.stage
-            )
-            raise error
-        except Exception as error:
-            service.record_attachment_task(
-                user_id, filename, "failed", 
-                error_message="转存任务处理失败", 
-                error_stage="worker"
-            )
-            raise ClipError("worker", "转存任务处理失败") from error
+    # ---------- Obsidian 插件同步接口 ----------
+
+    @app.get("/v1/sync/changes")
+    def sync_changes(
+        user_id: str = Depends(require_user),
+        since: str | None = None,
+        limit: int = 50,
+    ):
+        """插件增量拉取：返回 created > since 且 delivered=false 的 notes（按 created 升序）。
+
+        响应里的 note 不含 attachment_b64，附件字节通过 /v1/sync/notes/{id}/attachment 单独下载，
+        以避免单次响应过大。
+        """
+        if limit < 1 or limit > 200:
+            limit = 50
+        since_iso = since or "1970-01-01T00:00:00Z"
+        notes = service.list_pending_notes(user_id, since_iso, limit=limit)
+        return {
+            "notes": notes,
+            "server_time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        }
+
+    @app.post("/v1/sync/ack")
+    def sync_ack(payload: AckRequest, user_id: str = Depends(require_user)):
+        """插件确认已写入 Vault 的 note_ids，服务端标记 delivered 并清空 attachment_b64。"""
+        acked = service.ack_notes(user_id, payload.note_ids)
+        return {"acked": acked}
+
+    @app.get("/v1/sync/notes/{note_id}/attachment")
+    def sync_attachment(note_id: str, user_id: str = Depends(require_user)):
+        """流式返回附件原始字节（仅 kind=attachment 且属主匹配）。"""
+        record = service.get_note_for_user(user_id, note_id)
+        b64data = record.get("attachment_b64") or ""
+        if not b64data:
+            raise HTTPException(404, "附件字节不存在或已被清理")
+        content = base64.b64decode(b64data)
+        mime = record.get("attachment_mime") or "application/octet-stream"
+        return Response(content=content, media_type=mime)
 
     from pathlib import Path
     static_dir = Path(__file__).parent.parent / "static"
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
-
     return app
-
