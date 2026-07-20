@@ -107,8 +107,9 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
             payload
         } catch (error: ApiException) {
             throw error
-        } catch (_: Exception) {
-            throw ApiException("请求失败，请检查网络和服务地址。")
+        } catch (error: Exception) {
+            error.printStackTrace()
+            throw ApiException("请求失败，请检查网络和服务地址。原果: ${error.javaClass.simpleName}: ${error.message}")
         } finally {
             connection.disconnect()
         }

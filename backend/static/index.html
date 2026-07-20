@@ -2,9 +2,12 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#f5f1e8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="拾笺" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>拾笺 · Shijian</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon-192.png">
@@ -23,20 +26,36 @@
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+    html, body {
+      height: 100%;
+      overflow-x: hidden;
+    }
+
     body {
       margin: 0;
       color: var(--ink);
       background: var(--paper);
       font-family: var(--font-sans);
       line-height: 1.5;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
+      padding-top: 0;
+      padding-bottom: 0;
+      min-height: 100dvh;
+    }
+
+    @media (pointer: coarse) {
+      html, body {
+        overscroll-behavior-y: none; /* 防止移动端下拉刷新和过度回弹 */
+      }
+    }
+
+    button, .btn, .btn-icon, .file-upload-area {
+      touch-action: manipulation; /* 消除移动端点击延迟 */
     }
 
     header {
       background: var(--panel);
       border-bottom: 1px solid var(--line);
-      padding: 16px 20px;
+      padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -353,7 +372,7 @@
     .settings-header {
       background: var(--panel);
       border-bottom: 1px solid var(--line);
-      padding: 16px 20px;
+      padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -371,13 +390,14 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom));
     }
 
     #toast {
       position: fixed;
-      bottom: 30px;
+      bottom: calc(30px + env(safe-area-inset-bottom));
       left: 50%;
-      transform: translateX(-50%) translateY(100px);
+      transform: translateX(-50%) translateY(150px);
       background: var(--ink);
       color: #fff;
       padding: 12px 24px;
@@ -386,6 +406,7 @@
       z-index: 200;
       transition: transform 0.3s ease;
       box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      white-space: nowrap;
     }
 
     #toast.visible {
