@@ -17,15 +17,16 @@ migrate((app) => {
       { name: "attachment_filename", type: "text" },
       { name: "attachment_mime", type: "text" },
       { name: "attachment_b64", type: "text" },
-      { name: "delivered", type: "bool", required: true },
+      // 注意：PocketBase 0.38 的 bool 字段在 list filter 里解析失败（已知问题），
+      // 故 delivered 用 number 字段（0=未交付，1=已交付）。
+      { name: "delivered", type: "number" },
       { name: "delivered_at", type: "date" },
       { name: "error_stage", type: "text" },
       { name: "error_message", type: "text" },
     ],
-    indexes: [
-      "CREATE INDEX idx_notes_user_delivered ON notes (user, delivered, created)",
-      "CREATE INDEX idx_notes_created ON notes (created)",
-    ],
+    // 不在此声明索引：PocketBase collection 创建阶段无法引用 created 自动字段，
+    // 且 MVP 阶段数据量小，索引收益有限（ponytail 原则）。
+    // 数据量增长后可新增 migration 用 raw SQL 添加 (user, delivered, created) 索引。
   })
   app.save(notes)
 }, (app) => {

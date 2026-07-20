@@ -17,7 +17,8 @@ interface PluginData {
 /**
  * 同步主逻辑。
  *
- * cursor 使用 server_time（每次响应返回），首次同步从 1970 起。
+ * cursor 用 note id（PocketBase 0.38 record id 是按时间单调递增的 base32 字符串，
+ * 比 created 字段更可靠）。响应里的 last_id 是本批次最大 id，作为下次请求的 cursor。
  * 单条失败不中断整批；已成功的 note 仍会 ack，避免反复重试。
  */
 export class SyncService {
@@ -31,7 +32,7 @@ export class SyncService {
 
   async doSync(): Promise<SyncResult> {
     const data = (await this.loadData()) as PluginData;
-    const cursor: string = data.lastSyncCursor || "1970-01-01T00:00:00Z";
+    const cursor: string = data.lastSyncCursor || "";
 
     const resp = await this.apiClient.pullChanges(cursor, 50);
     const notes = resp.notes || [];
@@ -66,11 +67,14 @@ export class SyncService {
       }
     }
 
-    data.lastSyncCursor = resp.server_time;
-    try {
-      await this.saveData(data);
-    } catch (err) {
-      console.error("[shijian-sync] 保存 cursor 失败:", err);
+    // 用响应返回的 last_id 作下次 cursor（比 server_time 更稳定）
+    if (resp.last_id) {
+      data.lastSyncCursor = resp.last_id;
+      try {
+        await this.saveData(data);
+      } catch (err) {
+        console.error("[shijian-sync] 保存 cursor 失败:", err);
+      }
     }
 
     return { synced, errors };

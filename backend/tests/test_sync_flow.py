@@ -144,7 +144,7 @@ class E2EFakePocketBase:
                 "attachment_b64": "",
                 "attachment_mime": "",
                 "attachment_filename": "",
-                "delivered": False,
+                "delivered": 0,
                 **body,
             }
             return self.notes[nid]

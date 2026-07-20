@@ -61,8 +61,10 @@ def test_notes_migration_creates_collection_with_required_fields():
     assert '{ name: "images", type: "json" }' in migration
     assert 'values: ["article", "attachment"]' in migration
     assert '{ name: "attachment_b64", type: "text" }' in migration
-    assert '{ name: "delivered", type: "bool", required: true }' in migration
-    assert "idx_notes_user_delivered ON notes (user, delivered, created)" in migration
+    assert '{ name: "delivered", type: "number" }' in migration  # bool 字段在 PocketBase 0.38 filter 里有 bug
+    # MVP 阶段不声明索引（PocketBase collection 创建阶段无法引用 created 自动字段）
+    assert "idx_notes_user_delivered" not in migration
+    assert "idx_notes_created" not in migration
 
 
 def test_drop_fns_settings_migration_deletes_collection():

@@ -162,7 +162,7 @@ class ClipService:
             "content_md": content_md,
             "images": images,
             "kind": kind,
-            "delivered": False,
+            "delivered": 0,  # PocketBase 0.38 bool 字段 filter 有 bug，用 number 0/1
         }
         return self.pocketbase.create_record("notes", body)
 
@@ -185,33 +185,39 @@ class ClipService:
             "attachment_filename": filename,
             "attachment_mime": mime,
             "attachment_b64": b64data,
-            "delivered": False,
+            "delivered": 0,
         }
         record = self.pocketbase.create_record("notes", body)
         # 同步在 clip_tasks 记一条成功任务，便于 APK 任务列表显示
         self.record_attachment_task(user_id, filename, "succeeded", record.get("filename", filename))
         return {"id": record.get("id"), "filename": filename}
 
-    def list_pending_notes(self, user_id: str, since_iso: str, limit: int = 50) -> list[dict]:
-        """返回该用户 created > since_iso 且 delivered=false 的 notes，按 created 升序。"""
-        filter_value = f'user = "{user_id}" && delivered = false && created > "{since_iso}"'
+    def list_pending_notes(self, user_id: str, since_cursor: str, limit: int = 50) -> list[dict]:
+        """返回该用户 delivered=0（未交付）且 id > since_cursor 的 notes，按 id 升序。
+
+        PocketBase 的 record id 是按时间排序的 lex-string（15 字符 base32），比
+        created 字段更稳定地单调递增，因此用 id 作 cursor 而不是 created。
+        """
+        filter_value = f'user = "{user_id}" && delivered = 0'
+        if since_cursor:
+            filter_value += f' && id > "{since_cursor}"'
         records = self.pocketbase.list_records_sorted(
-            "notes", filter_value, sort="created", per_page=limit
+            "notes", filter_value, sort="id", per_page=limit
         )
         return [self._note_summary(record) for record in records]
 
     def ack_notes(self, user_id: str, note_ids: list[str]) -> int:
-        """把指定 notes 标记为已交付，并清空 attachment_b64 释放空间。返回实际 ack 数量。"""
+        """把指定 notes 标记为已交付（delivered=1），并清空 attachment_b64 释放空间。返回实际 ack 数量。"""
         acked = 0
         now_iso = datetime.now(UTC).isoformat()
         for note_id in note_ids:
             record = self._find_user_note(user_id, note_id)
-            if record is None or record.get("delivered"):
+            if record is None or record.get("delivered") == 1:
                 continue
             self.pocketbase.update_record(
                 "notes",
                 note_id,
-                {"delivered": True, "delivered_at": now_iso, "attachment_b64": ""},
+                {"delivered": 1, "delivered_at": now_iso, "attachment_b64": ""},
             )
             acked += 1
         return acked

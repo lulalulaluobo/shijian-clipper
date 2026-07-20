@@ -132,17 +132,22 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
         since: str | None = None,
         limit: int = 50,
     ):
-        """插件增量拉取：返回 created > since 且 delivered=false 的 notes（按 created 升序）。
+        """插件增量拉取：返回 delivered=0 且 id > since（cursor）的 notes（按 id 升序）。
 
-        响应里的 note 不含 attachment_b64，附件字节通过 /v1/sync/notes/{id}/attachment 单独下载，
-        以避免单次响应过大。
+        cursor 用 note id 而不是时间戳——PocketBase 的 record id 是按时间单调递增的
+        base32 字符串，比 created 字段更可靠。客户端应在 ack 成功后保存本批次最大 id
+        作为下次请求的 since 参数。
+
+        响应里的 note 不含 attachment_b64，附件字节通过 /v1/sync/notes/{id}/attachment
+        单独下载，以避免单次响应过大。
         """
         if limit < 1 or limit > 200:
             limit = 50
-        since_iso = since or "1970-01-01T00:00:00Z"
-        notes = service.list_pending_notes(user_id, since_iso, limit=limit)
+        notes = service.list_pending_notes(user_id, since or "", limit=limit)
+        last_id = notes[-1]["id"] if notes else (since or "")
         return {
             "notes": notes,
+            "last_id": last_id,
             "server_time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }
 

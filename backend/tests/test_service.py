@@ -194,8 +194,8 @@ class NotesPocketBase:
         return {"id": record_id, **body}
 
     def list_records_sorted(self, collection, filter_value, sort="created", per_page=50):
-        # 简单过滤：只返回 delivered=false 的 notes
-        return [n for n in self.notes if not n.get("delivered", False)][:per_page]
+        # 简单过滤：只返回 delivered=0 的 notes
+        return [n for n in self.notes if not n.get("delivered", 0)][:per_page]
 
     def list_records(self, collection, filter_value, per_page=1):
         # 支持按 id 查询单条 note（用于 _find_user_note）
@@ -233,7 +233,7 @@ def test_create_note_writes_article_to_notes_collection():
     assert body["content_md"] == "# 正文"
     assert body["images"] == images
     assert body["kind"] == "article"
-    assert body["delivered"] is False
+    assert body["delivered"] == 0
     assert "id" in result
 
 
@@ -251,15 +251,15 @@ def test_create_attachment_note_stores_base64_bytes():
     assert body["attachment_mime"] == "application/pdf"
     assert body["attachment_b64"] == "JVBERi0="
     assert body["content_md"] == ""
-    assert body["delivered"] is False
+    assert body["delivered"] == 0
     assert "id" in result
 
 
 def test_list_pending_notes_returns_undelivered_sorted_by_created():
     notes = [
-        {"id": "n1", "user": "user-a", "delivered": False, "created": "2026-07-19T09:00:00Z", "title": "t1"},
-        {"id": "n2", "user": "user-a", "delivered": False, "created": "2026-07-19T10:00:00Z", "title": "t2"},
-        {"id": "n3", "user": "user-a", "delivered": True, "created": "2026-07-19T08:00:00Z", "title": "t3"},
+        {"id": "n1", "user": "user-a", "delivered": 0, "created": "2026-07-19T09:00:00Z", "title": "t1"},
+        {"id": "n2", "user": "user-a", "delivered": 0, "created": "2026-07-19T10:00:00Z", "title": "t2"},
+        {"id": "n3", "user": "user-a", "delivered": 1, "created": "2026-07-19T08:00:00Z", "title": "t3"},
     ]
     pocketbase = NotesPocketBase(notes=notes)
     service = ClipService(pocketbase)
@@ -272,8 +272,8 @@ def test_list_pending_notes_returns_undelivered_sorted_by_created():
 
 def test_ack_notes_marks_delivered_and_clears_attachment_bytes():
     notes = [
-        {"id": "n1", "user": "user-a", "delivered": False, "attachment_b64": "JVBERi0=", "created": "2026-07-19T09:00:00Z"},
-        {"id": "n2", "user": "user-a", "delivered": False, "attachment_b64": "", "created": "2026-07-19T10:00:00Z"},
+        {"id": "n1", "user": "user-a", "delivered": 0, "attachment_b64": "JVBERi0=", "created": "2026-07-19T09:00:00Z"},
+        {"id": "n2", "user": "user-a", "delivered": 0, "attachment_b64": "", "created": "2026-07-19T10:00:00Z"},
     ]
     pocketbase = NotesPocketBase(notes=notes)
     service = ClipService(pocketbase)
@@ -283,13 +283,13 @@ def test_ack_notes_marks_delivered_and_clears_attachment_bytes():
     assert acked == 2
     # 至少调用 update 两次，清空 attachment_b64 并设置 delivered
     n1_update = next(body for collection, rid, body in pocketbase.updated if rid == "n1")
-    assert n1_update["delivered"] is True
+    assert n1_update["delivered"] == 1
     assert n1_update["attachment_b64"] == ""
     assert "delivered_at" in n1_update
 
 
 def test_ack_notes_is_idempotent_for_already_delivered():
-    notes = [{"id": "n1", "user": "user-a", "delivered": True, "attachment_b64": "", "created": "2026-07-19T09:00:00Z"}]
+    notes = [{"id": "n1", "user": "user-a", "delivered": 1, "attachment_b64": "", "created": "2026-07-19T09:00:00Z"}]
     pocketbase = NotesPocketBase(notes=notes)
     service = ClipService(pocketbase)
 

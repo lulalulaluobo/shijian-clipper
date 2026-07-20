@@ -52,7 +52,7 @@ def test_list_records_sorted_passes_sort_and_filter_to_query():
 
     result = client.list_records_sorted(
         "notes",
-        'user = "u1" && delivered = false',
+        'user = "u1" && delivered = 0',
         sort="created",
         per_page=50,
     )
@@ -62,5 +62,5 @@ def test_list_records_sorted_passes_sort_and_filter_to_query():
     full_url = list_request.full_url
     assert "sort=created" in full_url
     assert "perPage=50" in full_url
-    assert "delivered+%3D+false" in full_url or "delivered+False" in full_url or "delivered" in full_url
+    assert "delivered+%3D+0" in full_url or "delivered+0" in full_url or "delivered" in full_url
     assert result == items
