@@ -1,25 +1,11 @@
 services:
-  caddy:
-    image: caddy:2.10-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      api:
-        condition: service_started
-
   pocketbase:
     build:
       context: ..
       dockerfile: deploy/pocketbase/Dockerfile
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:18090:8090"
     environment:
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
       POCKETBASE_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
@@ -36,6 +22,8 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:18000:8000"
     environment:
       POCKETBASE_URL: http://pocketbase:8090
       POCKETBASE_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
@@ -64,6 +52,4 @@ services:
         condition: service_healthy
 
 volumes:
-  caddy_data:
-  caddy_config:
   pocketbase_data:

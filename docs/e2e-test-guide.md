@@ -76,7 +76,7 @@ docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
 ```
 
 **预期**：
-- 4 个容器 Up：`caddy`、`pocketbase`（healthy）、`api`、`worker`
+- 3 个容器 Up：`pocketbase`（healthy）、`api`、`worker`
 - 首次启动会自动应用两个新 migration：
   - `1710000005_create_notes_table.js`（创建 notes collection）
   - `1710000006_drop_fns_settings.js`（删除 fns_settings collection）
@@ -84,16 +84,16 @@ docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
 ### 1.4 健康检查
 
 ```bash
-# 内网（VPS 上）
-curl -fsS http://localhost/healthz
+# 内网（VPS 上直接访问 API 端口）
+curl -fsS http://localhost:18000/healthz
 # 预期：{"status":"ok"}
 
-# 外网（你本地的电脑）
+# 外网（你本地的电脑访问 Nginx/反代绑定的 HTTPS 域名）
 curl -fsS https://wechat.example.com/healthz
 # 预期：{"status":"ok"}
 ```
 
-如果外网失败，检查：DNS 是否解析到 VPS IP、Caddy 是否已签发证书（看 `docker logs deploy-caddy-1`）、防火墙是否放行 80/443。
+如果外网失败，检查：DNS 是否解析到 VPS IP、反向代理（如 Nginx）是否配置正确并能正常代理至本地对应端口、防火墙是否放行 80/443。
 
 ### 1.5 创建首个邀请码
 

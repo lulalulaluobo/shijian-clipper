@@ -4,14 +4,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_compose_exposes_only_caddy_and_persists_pocketbase_data():
+def test_compose_exposes_local_ports_and_persists_pocketbase_data():
     compose = (ROOT / "deploy/compose.yaml").read_text()
 
     assert "pocketbase_data:" in compose
     pocketbase = compose.split("  pocketbase:", 1)[1].split("  api:", 1)[0]
     api = compose.split("  api:", 1)[1].split("  worker:", 1)[0]
-    assert "    ports:" not in pocketbase
-    assert "    ports:" not in api
+    assert '"127.0.0.1:18090:8090"' in pocketbase
+    assert '"127.0.0.1:18000:8000"' in api
 
 
 def test_env_example_contains_only_secret_placeholders():
@@ -57,10 +57,10 @@ def test_notes_migration_creates_collection_with_required_fields():
     assert '{ name: "source_url", type: "url", required: true }' in migration
     assert '{ name: "title", type: "text", required: true }' in migration
     assert '{ name: "filename", type: "text", required: true }' in migration
-    assert '{ name: "content_md", type: "text" }' in migration
+    assert '{ name: "content_md", type: "text", max: 10000000 }' in migration
     assert '{ name: "images", type: "json" }' in migration
     assert 'values: ["article", "attachment"]' in migration
-    assert '{ name: "attachment_b64", type: "text" }' in migration
+    assert '{ name: "attachment_b64", type: "text", max: 30000000 }' in migration
     assert '{ name: "delivered", type: "number" }' in migration  # bool 字段在 PocketBase 0.38 filter 里有 bug
     # MVP 阶段不声明索引（PocketBase collection 创建阶段无法引用 created 自动字段）
     assert "idx_notes_user_delivered" not in migration

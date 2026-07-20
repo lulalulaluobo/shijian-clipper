@@ -1,14 +1,14 @@
 # 个人部署与分发
 
-这个部署会启动 PocketBase、Python API、顺序 Worker 和 Caddy。只有 Caddy 对外开放；APK 只访问你的 HTTPS 域名，不会直接访问 PocketBase。
+这个部署会启动 PocketBase、Python API 和顺序 Worker。为了安全，这些服务默认只绑定在本地回环端口（如 `127.0.0.1:18000` 和 `127.0.0.1:18090`），你需要自行设置反向代理（如 Nginx、Caddy 或 Traefik）配置域名和 HTTPS 以对外提供服务。
 
 ## 首次部署
 
-1. 给 VPS 配置一个域名 A/AAAA 记录，并放行 TCP 80、443。
+1. 给 VPS 配置域名 A/AAAA 记录，并放行 TCP 80、443。
 2. 在仓库根目录复制配置：`cp deploy/.env.example deploy/.env`。
-3. 在 `deploy/.env` 填写 `DOMAIN` 和一个新的 PocketBase 管理员邮箱/长密码。
+3. 在 `deploy/.env` 填写你的 PocketBase 管理员邮箱/长密码。
 4. 启动服务：`docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build`。
-5. 等待 Caddy 签发证书后访问 `https://你的域名/healthz`，应得到 `{"status":"ok"}`。
+5. 配置你的反向代理（如 Nginx），代理至本地 `127.0.0.1:18000`（API 服务）与 `127.0.0.1:18090`（PocketBase 服务），并启用 HTTPS 证书。随后访问 `https://你的域名/healthz`，应得到 `{"status":"ok"}`。
 
 ## 创建邀请码
 
