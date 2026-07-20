@@ -17,8 +17,7 @@ interface PluginData {
 /**
  * 同步主逻辑。
  *
- * cursor 用 note id（PocketBase 0.38 record id 是按时间单调递增的 base32 字符串，
- * 比 created 字段更可靠）。响应里的 last_id 是本批次最大 id，作为下次请求的 cursor。
+ * cursor 由服务端生成并视为 opaque 值。响应里的 last_id 用作下次请求的 cursor。
  * 单条失败不中断整批；已成功的 note 仍会 ack，避免反复重试。
  */
 export class SyncService {
@@ -57,9 +56,11 @@ export class SyncService {
       }
     }
 
+    let acknowledged = ackIds.length === 0;
     if (ackIds.length > 0) {
       try {
         await this.apiClient.ack(ackIds);
+        acknowledged = true;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`ack 失败: ${msg}`);
@@ -67,8 +68,8 @@ export class SyncService {
       }
     }
 
-    // 用响应返回的 last_id 作下次 cursor（比 server_time 更稳定）
-    if (resp.last_id) {
+    // 仅在整批处理并确认成功后推进 cursor，避免跳过失败或未确认的笔记。
+    if (errors.length === 0 && acknowledged && resp.last_id) {
       data.lastSyncCursor = resp.last_id;
       try {
         await this.saveData(data);

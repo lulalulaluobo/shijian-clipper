@@ -153,7 +153,7 @@ def test_clip_error_returns_stage_without_stacktrace():
 def test_limits_repeated_login_attempts_from_one_client():
     client = TestClient(create_app(FakeService(), RateLimiter()))
 
-    for _ in range(10):
+    for _ in range(60):
         assert client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"}).status_code == 200
 
     response = client.post("/v1/auth/login", json={"email": "a@example.com", "password": "long-password"})
@@ -212,6 +212,7 @@ def test_sync_changes_returns_pending_notes():
     assert len(body["notes"]) == 1
     assert body["notes"][0]["id"] == "note-1"
     assert body["notes"][0]["title"] == "标题A"
+    assert body["last_id"] == "2026-07-19T10:00:00Z|note-1"
 
 
 def test_sync_changes_requires_auth():

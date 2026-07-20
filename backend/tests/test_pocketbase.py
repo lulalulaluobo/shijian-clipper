@@ -64,3 +64,12 @@ def test_list_records_sorted_passes_sort_and_filter_to_query():
     assert "perPage=50" in full_url
     assert "delivered+%3D+0" in full_url or "delivered+0" in full_url or "delivered" in full_url
     assert result == items
+
+
+def test_list_records_sorted_passes_page_to_query():
+    opener = _stub_opener_with_items([])
+    client = PocketBaseClient("http://pocketbase:8090", "admin@example.com", "secret", opener=opener)
+
+    client.list_records_sorted("notes", 'user = "u1" && delivered = 0', sort="id", per_page=200, page=2)
+
+    assert "page=2" in opener.call_args_list[1].args[0].full_url

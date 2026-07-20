@@ -277,6 +277,7 @@ class NotesPocketBase:
         self.notes = notes or []
         self.created = []
         self.updated = []
+        self.list_sorted_calls = []
 
     def create_record(self, collection, body):
         record = {"id": f"note-{len(self.created) + 1}", "created": "2026-07-19T10:00:00Z", **body}
@@ -293,9 +294,11 @@ class NotesPocketBase:
                 return note
         return {"id": record_id, **body}
 
-    def list_records_sorted(self, collection, filter_value, sort="created", per_page=50):
-        # 简单过滤：只返回 delivered=0 的 notes
-        return [n for n in self.notes if not n.get("delivered", 0)][:per_page]
+    def list_records_sorted(self, collection, filter_value, sort="created", per_page=50, page=1):
+        self.list_sorted_calls.append((collection, filter_value, sort, per_page, page))
+        records = [n for n in self.notes if not n.get("delivered", 0) and n.get("user") in filter_value]
+        start = (page - 1) * per_page
+        return sorted(records, key=lambda note: note["id"])[start : start + per_page]
 
     def list_records(self, collection, filter_value, per_page=1):
         # 支持按 id 查询单条 note（用于 _find_user_note）
@@ -368,6 +371,30 @@ def test_list_pending_notes_returns_undelivered_sorted_by_created():
 
     # 排除已交付的 n3，按 created 升序
     assert [n["id"] for n in result] == ["n1", "n2"]
+    assert pocketbase.list_sorted_calls == [
+        ("notes", 'user = "user-a" && delivered = 0', "id", 200, 1)
+    ]
+
+
+def test_list_pending_notes_returns_only_records_after_cursor():
+    notes = [
+        {"id": "n1", "user": "user-a", "delivered": 0, "created": "2026-07-19T09:00:00Z", "title": "t1"},
+        {"id": "n2", "user": "user-a", "delivered": 0, "created": "2026-07-19T09:00:00Z", "title": "t2"},
+    ]
+
+    result = ClipService(NotesPocketBase(notes=notes)).list_pending_notes(
+        "user-a", "2026-07-19T09:00:00Z|n1", limit=50
+    )
+
+    assert [note["id"] for note in result] == ["n2"]
+
+
+def test_list_pending_notes_treats_legacy_random_id_cursor_as_empty():
+    notes = [{"id": "n1", "user": "user-a", "delivered": 0, "created": "2026-07-19T09:00:00Z", "title": "t1"}]
+
+    result = ClipService(NotesPocketBase(notes=notes)).list_pending_notes("user-a", "randomrecordid01", limit=50)
+
+    assert [note["id"] for note in result] == ["n1"]
 
 
 def test_ack_notes_marks_delivered_and_clears_attachment_bytes():

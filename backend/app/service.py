@@ -232,12 +232,36 @@ class ClipService:
         return {"id": record.get("id"), "filename": filename}
 
     def list_pending_notes(self, user_id: str, since_cursor: str, limit: int = 50) -> list[dict]:
-        """返回该用户 delivered=0（未交付）的 notes，按 id 排序。"""
+        """返回该用户 delivered=0（未交付）的 notes，按 created 与 id 排序。"""
         filter_value = f'user = "{user_id}" && delivered = 0'
-        records = self.pocketbase.list_records_sorted(
-            "notes", filter_value, sort="id", per_page=limit
-        )
-        return [self._note_summary(record) for record in records]
+        records: list[dict] = []
+        page = 1
+        while True:
+            batch = self.pocketbase.list_records_sorted(
+                "notes", filter_value, sort="id", per_page=200, page=page
+            )
+            records.extend(batch)
+            if len(batch) < 200:
+                break
+            page += 1
+        records.sort(key=lambda record: (str(record.get("created", "")), str(record.get("id", ""))))
+        if since_cursor:
+            created, separator, record_id = since_cursor.partition("|")
+            try:
+                datetime.fromisoformat(created.replace("Z", "+00:00"))
+            except ValueError:
+                pass  # 兼容旧版随机 id cursor：安全地从所有未交付记录重新扫描。
+            else:
+                if separator and record_id.isalnum():
+                    records = [
+                        record
+                        for record in records
+                        if str(record.get("created", "")) > created
+                        or (str(record.get("created", "")) == created and str(record.get("id", "")) > record_id)
+                    ]
+                elif not separator:
+                    records = [record for record in records if str(record.get("created", "")) > created]
+        return [self._note_summary(record) for record in records[:limit]]
 
     def ack_notes(self, user_id: str, note_ids: list[str]) -> int:
         """把指定 notes 标记为已交付（delivered=1），并清空 attachment_b64 释放空间。返回实际 ack 数量。"""

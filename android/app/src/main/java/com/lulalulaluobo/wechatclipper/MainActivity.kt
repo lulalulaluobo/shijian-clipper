@@ -1,5 +1,8 @@
 package com.lulalulaluobo.wechatclipper
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -397,6 +400,10 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     val context = LocalContext.current
     var canCreateInvites by remember { mutableStateOf(false) }
     var inviteCode by remember { mutableStateOf("") }
+    var apiTokens by remember { mutableStateOf(emptyList<ApiToken>()) }
+    var apiTokenLabel by remember { mutableStateOf("") }
+    var revealedApiToken by remember { mutableStateOf("") }
+    var showApiTokenDialog by remember { mutableStateOf(false) }
     var serverUrl by remember { mutableStateOf(session.baseUrl) }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -423,6 +430,7 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     LaunchedEffect(session) {
         try {
             canCreateInvites = withContext(Dispatchers.IO) { client.canCreateInvites() }
+            apiTokens = withContext(Dispatchers.IO) { client.listApiTokens() }
         } catch (error: Exception) {
             message = error.userMessage()
         }
@@ -437,6 +445,69 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
             Text("Obsidian 同步", style = MaterialTheme.typography.headlineSmall)
             Text("文章将在抓取后自动同步到你的 Obsidian 插件。请在 Obsidian 中安装「拾笺同步」插件并登录本服务账号。", style = MaterialTheme.typography.bodyMedium)
             if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+            Text("Obsidian API Token", style = MaterialTheme.typography.titleMedium)
+            Text("Token 仅在生成时显示一次；将它粘贴到 Obsidian 插件设置中。", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                apiTokenLabel,
+                { apiTokenLabel = it },
+                Modifier.fillMaxWidth(),
+                label = { Text("备注（可选）") },
+                singleLine = true,
+            )
+            Button(
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        try {
+                            val generated = withContext(Dispatchers.IO) { client.createApiToken(apiTokenLabel) }
+                            revealedApiToken = generated.token
+                            apiTokenLabel = ""
+                            apiTokens = withContext(Dispatchers.IO) { client.listApiTokens() }
+                            showApiTokenDialog = true
+                        } catch (error: Exception) {
+                            message = error.userMessage()
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+            ) { Text("生成 API Token") }
+            if (apiTokens.isEmpty()) {
+                Text("暂无 API Token。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                apiTokens.forEach { apiToken ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(apiToken.label.ifBlank { "无备注" }, style = MaterialTheme.typography.bodyMedium)
+                            Text(apiToken.created, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(
+                            onClick = {
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) { client.deleteApiToken(apiToken.id) }
+                                        apiTokens = withContext(Dispatchers.IO) { client.listApiTokens() }
+                                        message = "API Token 已删除。"
+                                    } catch (error: Exception) {
+                                        message = error.userMessage()
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                            enabled = !busy,
+                        ) { Text("删除") }
+                    }
+                }
+            }
             if (canCreateInvites) {
                 Spacer(Modifier.height(12.dp))
                 Text("成员邀请", style = MaterialTheme.typography.titleMedium)
@@ -510,6 +581,31 @@ private fun SettingsScreen(session: Session, onBack: () -> Unit, onLogout: () ->
     }
 
     val update = availableUpdate
+    if (showApiTokenDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showApiTokenDialog = false
+                revealedApiToken = ""
+            },
+            title = { Text("请立即保存 API Token") },
+            text = { Text(revealedApiToken) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("拾笺 API Token", revealedApiToken))
+                        message = "API Token 已复制到剪贴板。"
+                    },
+                ) { Text("复制") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showApiTokenDialog = false
+                    revealedApiToken = ""
+                }) { Text("完成") }
+            },
+        )
+    }
     if (showUpdateConfirmation && update != null) {
         AlertDialog(
             onDismissRequest = { showUpdateConfirmation = false },
@@ -583,4 +679,3 @@ fun readUriContent(context: android.content.Context, uri: Uri): Pair<String, Byt
         null
     }
 }
-
