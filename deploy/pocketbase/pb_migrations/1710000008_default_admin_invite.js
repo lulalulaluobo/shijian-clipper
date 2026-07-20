@@ -2,8 +2,8 @@ migrate((app) => {
   try {
     const collection = app.findCollectionByNameOrId("invite_codes")
     const record = new Record(collection)
-    // f48a205182ce86213f0ff002dd71b299c4205d0997784e42bdbe07c082bcc64e 是 "shijian_amin" 的 SHA-256 哈希值
-    record.set("code_hash", "f48a205182ce86213f0ff002dd71b299c4205d0997784e42bdbe07c082bcc64e")
+    // ec856256fd351acbe3e5cdd377247da5417d472dbbd2067021ee0eaa57a67aa1 是 "shijian_admin" 的 SHA-256 哈希值
+    record.set("code_hash", "ec856256fd351acbe3e5cdd377247da5417d472dbbd2067021ee0eaa57a67aa1")
     app.save(record)
   } catch (err) {
     console.log("Failed to insert default admin invite code: " + err)
@@ -12,7 +12,7 @@ migrate((app) => {
   try {
     const record = app.findFirstRecordByFilter(
       "invite_codes",
-      "code_hash = 'f48a205182ce86213f0ff002dd71b299c4205d0997784e42bdbe07c082bcc64e'"
+      "code_hash = 'ec856256fd351acbe3e5cdd377247da5417d472dbbd2067021ee0eaa57a67aa1'"
     )
     if (record) {
       app.delete(record)
