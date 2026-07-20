@@ -234,6 +234,8 @@ class ClipService:
     def list_pending_notes(self, user_id: str, since_cursor: str, limit: int = 50) -> list[dict]:
         """返回该用户 delivered=0（未交付）的 notes，按 id 排序。"""
         filter_value = f'user = "{user_id}" && delivered = 0'
+        if since_cursor:
+            filter_value += f' && id > "{since_cursor}"'
         records = self.pocketbase.list_records_sorted(
             "notes", filter_value, sort="id", per_page=limit
         )

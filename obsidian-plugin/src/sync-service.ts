@@ -57,9 +57,11 @@ export class SyncService {
       }
     }
 
+    let acknowledged = ackIds.length === 0;
     if (ackIds.length > 0) {
       try {
         await this.apiClient.ack(ackIds);
+        acknowledged = true;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`ack 失败: ${msg}`);
@@ -67,8 +69,8 @@ export class SyncService {
       }
     }
 
-    // 用响应返回的 last_id 作下次 cursor（比 server_time 更稳定）
-    if (resp.last_id) {
+    // 仅在整批处理并确认成功后推进 cursor，避免跳过失败或未确认的笔记。
+    if (errors.length === 0 && acknowledged && resp.last_id) {
       data.lastSyncCursor = resp.last_id;
       try {
         await this.saveData(data);

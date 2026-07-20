@@ -294,8 +294,12 @@ class NotesPocketBase:
         return {"id": record_id, **body}
 
     def list_records_sorted(self, collection, filter_value, sort="created", per_page=50):
-        # 简单过滤：只返回 delivered=0 的 notes
-        return [n for n in self.notes if not n.get("delivered", 0)][:per_page]
+        # 简单过滤：只返回 delivered=0 的 notes，并支持 id cursor。
+        records = [n for n in self.notes if not n.get("delivered", 0)]
+        if 'id > "' in filter_value:
+            cursor = filter_value.split('id > "', 1)[1].split('"', 1)[0]
+            records = [n for n in records if n["id"] > cursor]
+        return sorted(records, key=lambda note: note["id"])[:per_page]
 
     def list_records(self, collection, filter_value, per_page=1):
         # 支持按 id 查询单条 note（用于 _find_user_note）
@@ -368,6 +372,17 @@ def test_list_pending_notes_returns_undelivered_sorted_by_created():
 
     # 排除已交付的 n3，按 created 升序
     assert [n["id"] for n in result] == ["n1", "n2"]
+
+
+def test_list_pending_notes_returns_only_records_after_cursor():
+    notes = [
+        {"id": "n1", "user": "user-a", "delivered": 0, "created": "2026-07-19T09:00:00Z", "title": "t1"},
+        {"id": "n2", "user": "user-a", "delivered": 0, "created": "2026-07-19T10:00:00Z", "title": "t2"},
+    ]
+
+    result = ClipService(NotesPocketBase(notes=notes)).list_pending_notes("user-a", "n1", limit=50)
+
+    assert [note["id"] for note in result] == ["n2"]
 
 
 def test_ack_notes_marks_delivered_and_clears_attachment_bytes():
