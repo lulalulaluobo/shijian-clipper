@@ -109,6 +109,16 @@ npm run build
 
 Copy `main.js` and `manifest.json` into your Obsidian Vault's `.obsidian/plugins/shijian-sync/` directory, then enable the plugin ("拾笺同步") under Obsidian's community plugins settings.
 
+### Install with BRAT
+
+Install and enable the BRAT community plugin in Obsidian. Run **BRAT: Add a beta plugin for testing**, then paste:
+
+```
+https://github.com/lulalulaluobo/shijian-clipper
+```
+
+BRAT installs the release assets and keeps this plugin updated automatically.
+
 ### Configuration
 
 On the plugin settings page, fill in:

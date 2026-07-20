@@ -110,6 +110,16 @@ npm run build
 
 把 `main.js`、`manifest.json` 复制到 Obsidian Vault 的 `.obsidian/plugins/shijian-sync/` 目录，然后在 Obsidian 设置 of 第三方插件里启用「拾笺同步」。
 
+### 使用 BRAT 自动安装
+
+先在 Obsidian 的第三方插件市场安装并启用 BRAT，执行 **BRAT: Add a beta plugin for testing**，然后粘贴：
+
+```
+https://github.com/lulalulaluobo/shijian-clipper
+```
+
+BRAT 会下载 Release 中的插件资产，并自动检查更新。
+
 ### 配置
 
 在插件设置页填写：
