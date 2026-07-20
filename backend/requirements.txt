@@ -1,4 +1,4 @@
-fastapi>=0.115,<1
+fastapi>=0.139.2,<1
 httpx>=0.28,<1
 python-multipart>=0.0.18
 pytest>=8.3,<9
