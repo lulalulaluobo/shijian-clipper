@@ -52,7 +52,7 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
         client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").rsplit(",", 1)[-1].strip()
         path = request.url.path
         if path in {"/v1/auth/login", "/v1/auth/register"}:
-            key, limit, window = f"auth:{client_ip}", 10, 300
+            key, limit, window = f"auth:{client_ip}", 60, 60
         elif path.startswith("/v1/sync/"):
             token = request.headers.get("authorization", "")
             key, limit, window = f"sync:{sha256(token.encode()).hexdigest()}", 30, 60
