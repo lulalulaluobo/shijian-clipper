@@ -34,6 +34,10 @@ class AckRequest(BaseModel):
     note_ids: list[str] = Field(min_length=0, max_length=200)
 
 
+class TokenRequest(BaseModel):
+    label: str = Field(default="", max_length=128)
+
+
 def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     app = FastAPI()
     limiter = rate_limiter or RateLimiter()
@@ -65,6 +69,17 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
 
     @app.exception_handler(ApiError)
     def handle_api_error(_, error: ApiError):
+        import traceback
+        traceback.print_exc()
+        if error.__cause__:
+            print("Original cause:", error.__cause__, flush=True)
+            if hasattr(error.__cause__, "read"):
+                try:
+                    # HTTPError body is readable once
+                    body = error.__cause__.read().decode()
+                    print("Original response:", body, flush=True)
+                except Exception:
+                    pass
         return JSONResponse(status_code=error.status_code, content={"message": str(error)})
 
     @app.exception_handler(ClipError)
@@ -95,6 +110,20 @@ def create_app(service, rate_limiter: RateLimiter | None = None) -> FastAPI:
     @app.post("/v1/invites", status_code=201)
     def create_invite(user_id: str = Depends(require_user)):
         return service.create_invite(user_id)
+
+    # ---------- API Token 管理 ----------
+
+    @app.post("/v1/api-tokens", status_code=201)
+    def create_api_token(payload: TokenRequest, user_id: str = Depends(require_user)):
+        return service.generate_api_token(user_id, payload.label)
+
+    @app.get("/v1/api-tokens")
+    def list_api_tokens(user_id: str = Depends(require_user)):
+        return service.list_api_tokens(user_id)
+
+    @app.delete("/v1/api-tokens/{token_id}", status_code=204)
+    def delete_api_token(token_id: str, user_id: str = Depends(require_user)):
+        service.delete_api_token(user_id, token_id)
 
     @app.post("/v1/clips", status_code=201)
     def create_clip(payload: ClipRequest, user_id: str = Depends(require_user)):

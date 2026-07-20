@@ -23,9 +23,19 @@ class FakeService:
         return {"token": "token-a", "user": {"id": "user-a", "email": email}}
 
     def current_user(self, token):
-        if token != "token-a":
+        if token not in ("token-a", "sk_test_token"):
             raise ApiError("登录已失效", 401)
         return "user-a"
+
+    def generate_api_token(self, user_id, label=""):
+        return {"id": "tok-1", "token": "sk_test_generated", "label": label}
+
+    def list_api_tokens(self, user_id):
+        return [{"id": "tok-1", "label": "MacBook", "created": "2026-07-20T10:00:00Z"}]
+
+    def delete_api_token(self, user_id, token_id):
+        if token_id != "tok-1":
+            raise ApiError("Token 不存在", 404)
 
     def create_clip(self, user_id, url):
         return {"id": "task-a", "status": "queued", "source_url": url, "user": user_id}

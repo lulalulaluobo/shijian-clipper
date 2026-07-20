@@ -24,13 +24,13 @@ async function hashUrl(url: string): Promise<string> {
  */
 function inferExtension(urlOrMime: string): string {
   const lower = urlOrMime.toLowerCase();
-  if (lower.includes(".png") || lower.includes("image/png")) return "png";
-  if (lower.includes(".jpg") || lower.includes(".jpeg") || lower.includes("image/jpeg"))
+  if (lower.includes("png") || lower.includes("image/png")) return "png";
+  if (lower.includes("jpg") || lower.includes("jpeg") || lower.includes("image/jpeg"))
     return "jpg";
-  if (lower.includes(".gif") || lower.includes("image/gif")) return "gif";
-  if (lower.includes(".webp") || lower.includes("image/webp")) return "webp";
-  if (lower.includes(".svg") || lower.includes("image/svg")) return "svg";
-  if (lower.includes(".bmp") || lower.includes("image/bmp")) return "bmp";
+  if (lower.includes("gif") || lower.includes("image/gif")) return "gif";
+  if (lower.includes("webp") || lower.includes("image/webp")) return "webp";
+  if (lower.includes("svg") || lower.includes("image/svg")) return "svg";
+  if (lower.includes("bmp") || lower.includes("image/bmp")) return "bmp";
   if (lower.includes(".pdf") || lower.includes("application/pdf")) return "pdf";
   if (lower.includes(".xlsx") || lower.includes("spreadsheet"))
     return "xlsx";
@@ -85,14 +85,17 @@ export async function downloadAndSaveImages(
   for (const imageUrl of imageUrls) {
     if (!imageUrl) continue;
     try {
-      const bytes = await apiClient.downloadImageBytes(imageUrl);
+      const { arrayBuffer, contentType } = await apiClient.downloadImageBytes(imageUrl);
       const hash = await hashUrl(imageUrl);
-      const ext = inferExtension(imageUrl);
+      let ext = inferExtension(contentType);
+      if (ext === "bin") {
+        ext = inferExtension(imageUrl);
+      }
       const filename = `${hash}.${ext}`;
       const fullPath = normalizePath(`${attachmentsDir}/${filename}`);
 
       if (!(await vault.adapter.exists(fullPath))) {
-        await vault.createBinary(fullPath, bytes);
+        await vault.createBinary(fullPath, arrayBuffer);
       }
 
       // Obsidian 对 ![](path) 中带空格或中文的路径需要用相对路径

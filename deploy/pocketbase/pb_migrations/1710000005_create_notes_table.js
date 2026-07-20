@@ -11,12 +11,12 @@ migrate((app) => {
       { name: "source_url", type: "url", required: true },
       { name: "title", type: "text", required: true },
       { name: "filename", type: "text", required: true },
-      { name: "content_md", type: "text" },
+      { name: "content_md", type: "text", max: 10000000 },
       { name: "images", type: "json" },
       { name: "kind", type: "select", required: true, maxSelect: 1, values: ["article", "attachment"] },
       { name: "attachment_filename", type: "text" },
       { name: "attachment_mime", type: "text" },
-      { name: "attachment_b64", type: "text" },
+      { name: "attachment_b64", type: "text", max: 30000000 },
       // 注意：PocketBase 0.38 的 bool 字段在 list filter 里解析失败（已知问题），
       // 故 delivered 用 number 字段（0=未交付，1=已交付）。
       { name: "delivered", type: "number" },

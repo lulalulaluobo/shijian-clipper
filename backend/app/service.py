@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from threading import Lock
 
@@ -44,12 +45,50 @@ class ClipService:
         return {"id": user_id, "email": user_email}
 
     def current_user(self, token: str) -> str:
+        if token.startswith("sk_"):
+            return self._authenticate_api_token(token)
         user_id = self.pocketbase.authenticate_user(token)
         users = self.pocketbase.list_records("users", f'id = "{user_id}"')
         if not users:
             raise ApiError("用户不存在", 401)
         self._require_active_access(users[0])
         return user_id
+
+    def _authenticate_api_token(self, token: str) -> str:
+        """通过 sk_ 前缀的 API Token 鉴权，返回 user_id。"""
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        records = self.pocketbase.list_records("api_tokens", f'token_hash = "{token_hash}"')
+        if not records:
+            raise ApiError("API Token 无效", 401)
+        user_id = records[0].get("user")
+        if not isinstance(user_id, str) or not user_id:
+            raise ApiError("API Token 无效", 401)
+        users = self.pocketbase.list_records("users", f'id = "{user_id}"')
+        if not users:
+            raise ApiError("用户不存在", 401)
+        self._require_active_access(users[0])
+        return user_id
+
+    def generate_api_token(self, user_id: str, label: str = "") -> dict:
+        """为用户生成一个 API Token，返回含明文 token 的字典（仅此一次可见）。"""
+        raw = f"sk_{secrets.token_hex(32)}"
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        record = self.pocketbase.create_record(
+            "api_tokens", {"user": user_id, "token_hash": token_hash, "label": label.strip()[:128]}
+        )
+        return {"id": record.get("id"), "token": raw, "label": label.strip()[:128]}
+
+    def list_api_tokens(self, user_id: str) -> list[dict]:
+        """列出该用户所有 API Token（不含 hash）。"""
+        records = self.pocketbase.list_records("api_tokens", f'user = "{user_id}"', per_page=50)
+        return [{"id": r.get("id"), "label": r.get("label", ""), "created": r.get("created", "")} for r in records]
+
+    def delete_api_token(self, user_id: str, token_id: str) -> None:
+        """删除指定 API Token（需属主匹配）。"""
+        records = self.pocketbase.list_records("api_tokens", f'id = "{token_id}" && user = "{user_id}"')
+        if not records:
+            raise ApiError("Token 不存在", 404)
+        self.pocketbase.delete_record("api_tokens", token_id)
 
     def login(self, email: str, password: str) -> dict:
         payload = self.pocketbase.login_user(email.strip(), password)
@@ -193,14 +232,8 @@ class ClipService:
         return {"id": record.get("id"), "filename": filename}
 
     def list_pending_notes(self, user_id: str, since_cursor: str, limit: int = 50) -> list[dict]:
-        """返回该用户 delivered=0（未交付）且 id > since_cursor 的 notes，按 id 升序。
-
-        PocketBase 的 record id 是按时间排序的 lex-string（15 字符 base32），比
-        created 字段更稳定地单调递增，因此用 id 作 cursor 而不是 created。
-        """
+        """返回该用户 delivered=0（未交付）的 notes，按 id 排序。"""
         filter_value = f'user = "{user_id}" && delivered = 0'
-        if since_cursor:
-            filter_value += f' && id > "{since_cursor}"'
         records = self.pocketbase.list_records_sorted(
             "notes", filter_value, sort="id", per_page=limit
         )

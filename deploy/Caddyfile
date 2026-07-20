@@ -1,6 +1,6 @@
 {$DOMAIN} {
 	request_body {
-		max_size 20KB
+		max_size 20MB
 	}
 	header {
 		-Server

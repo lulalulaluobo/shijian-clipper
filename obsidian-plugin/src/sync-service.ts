@@ -82,24 +82,44 @@ export class SyncService {
 
   private async processNote(note: NoteEntry): Promise<void> {
     if (note.kind === "article") {
-      const rewritten = await downloadAndSaveImages(
-        this.vault,
-        note.content_md || "",
-        note.images || [],
-        this.settings.articlesDir,
-        this.settings.attachmentsDir,
-        this.apiClient,
-      );
+      let rewritten = note.content_md || "";
+      if (this.settings.downloadImagesLocally) {
+        rewritten = await downloadAndSaveImages(
+          this.vault,
+          note.content_md || "",
+          note.images || [],
+          this.settings.articlesDir,
+          this.settings.attachmentsDir,
+          this.apiClient,
+        );
+      }
       const fullContent = buildArticleContent(note, rewritten);
       await writeNote(this.vault, note, this.settings.articlesDir, fullContent);
     } else if (note.kind === "attachment") {
-      const bytes = await this.apiClient.downloadAttachment(note.id);
-      await saveAttachmentFile(
-        this.vault,
-        note,
-        this.settings.attachmentsDir,
-        bytes,
-      );
+      try {
+        const bytes = await this.apiClient.downloadAttachment(note.id);
+        await saveAttachmentFile(
+          this.vault,
+          note,
+          this.settings.attachmentsDir,
+          bytes,
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("status 404") || msg.includes("status 400")) {
+          console.warn(`[shijian-sync] 附件 ${note.id} 在服务器上已不存在，跳过并保存占位符文件:`, err);
+          const placeholderText = `[拾笺] 该附件在服务器上不存在或已清空。\n文件名: ${note.attachment_filename || note.filename || note.id}\n源地址: ${note.source_url || ""}`;
+          const placeholderBytes = new TextEncoder().encode(placeholderText);
+          await saveAttachmentFile(
+            this.vault,
+            note,
+            this.settings.attachmentsDir,
+            placeholderBytes.buffer,
+          );
+        } else {
+          throw err;
+        }
+      }
     } else {
       throw new Error(`未知 kind: ${note.kind}`);
     }

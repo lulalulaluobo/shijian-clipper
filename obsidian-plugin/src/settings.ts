@@ -31,29 +31,16 @@ export class ShijianSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("邮箱")
-      .setDesc("注册账号的邮箱")
-      .addText((text) =>
-        text
-          .setPlaceholder("you@example.com")
-          .setValue(this.plugin.settings.email)
-          .onChange(async (v) => {
-            this.plugin.settings.email = v.trim();
-            await this.plugin.saveSettings();
-            this.plugin.restartPolling();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("密码")
-      .setDesc("账号密码（明文保存在本地 data.json，请确保设备安全）")
+      .setName("API Token")
+      .setDesc("在网页端「设置 → Obsidian 同步 Token」中生成，粘贴到此处")
       .addText((text) => {
         text
-          .setPlaceholder("••••••••")
-          .setValue(this.plugin.settings.password)
+          .setPlaceholder("sk_...")
+          .setValue(this.plugin.settings.apiToken)
           .onChange(async (v) => {
-            this.plugin.settings.password = v;
+            this.plugin.settings.apiToken = v.trim();
             await this.plugin.saveSettings();
+            this.plugin.restartPolling();
           });
         text.inputEl.type = "password";
       });
@@ -112,6 +99,18 @@ export class ShijianSettingTab extends PluginSettingTab {
             this.plugin.settings.autoSync = v;
             await this.plugin.saveSettings();
             this.plugin.restartPolling();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("下载图片到本地")
+      .setDesc("开启后会将文章中的图片下载并保存到本地附件目录；关闭后保持微信图片外链显示（默认关闭，节省本地空间）")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.downloadImagesLocally)
+          .onChange(async (v) => {
+            this.plugin.settings.downloadImagesLocally = v;
+            await this.plugin.saveSettings();
           }),
       );
   }

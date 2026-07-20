@@ -24,7 +24,10 @@ class PocketBaseClient:
         request = Request(f"{self.base_url}{path}", data=data, headers=headers, method=method)
         try:
             with self.opener(request, timeout=30) as response:
-                payload = json.loads(response.read().decode())
+                raw_bytes = response.read()
+                if not raw_bytes:
+                    return {}
+                payload = json.loads(raw_bytes.decode())
         except (HTTPError, URLError, OSError, ValueError) as error:
             raise ApiError("后端服务请求失败", 502) from error
         if not isinstance(payload, dict):
@@ -89,7 +92,13 @@ class PocketBaseClient:
         self.request("DELETE", f"/api/collections/{collection}/records/{record_id}", token=self._admin_token())
 
     def authenticate_user(self, token: str) -> str:
-        payload = self.request("POST", "/api/collections/users/auth-refresh", token=token)
+        try:
+            payload = self.request("POST", "/api/collections/users/auth-refresh", token=token)
+        except ApiError as error:
+            cause = error.__cause__
+            if isinstance(cause, HTTPError) and cause.code in (400, 401, 403, 404):
+                raise ApiError("登录已失效", 401) from error
+            raise
         record = payload.get("record")
         user_id = record.get("id") if isinstance(record, dict) else None
         if not isinstance(user_id, str) or not user_id:

@@ -13,8 +13,32 @@ class FakePocketBase:
         self.invites = {"invite-record": {"id": "invite-record", "code_hash": self.code_hash, "used_by": ""}}
         self.users = {}
         self.auth_users = {"user-a": {"id": "user-a", "access_expires_at": "2999-01-01 00:00:00Z"}}
+        self.api_tokens = {}
+        self._next_id = 1
 
     def list_records(self, collection, filter_value, per_page=1):
+        if collection == "api_tokens":
+            results = []
+            for rec in self.api_tokens.values():
+                match = True
+                if "token_hash" in filter_value:
+                    # Extract hash from filter
+                    h = filter_value.split('"')[1] if '"' in filter_value else ""
+                    if rec.get("token_hash") != h:
+                        match = False
+                if "user" in filter_value and "&&" not in filter_value:
+                    pass  # list all for user
+                if 'id = "' in filter_value:
+                    tid = filter_value.split('id = "')[1].split('"')[0]
+                    if rec.get("id") != tid:
+                        match = False
+                if 'user = "' in filter_value:
+                    uid = filter_value.split('user = "')[1].split('"')[0]
+                    if rec.get("user") != uid:
+                        match = False
+                if match:
+                    results.append(rec)
+            return results
         if collection == "users" and "user-a" in filter_value:
             return [self.auth_users["user-a"]]
         if collection != "invite_codes" or self.code_hash not in filter_value:
@@ -26,11 +50,22 @@ class FakePocketBase:
         self.users[user["id"]] = user
         return user
 
+    def create_record(self, collection, body):
+        rec_id = f"rec-{self._next_id}"
+        self._next_id += 1
+        record = {"id": rec_id, "created": "2026-07-20T10:00:00Z", **body}
+        if collection == "api_tokens":
+            self.api_tokens[rec_id] = record
+        return record
+
     def update_record(self, collection, record_id, body):
         (self.users if collection == "users" else self.invites)[record_id].update(body)
 
     def delete_record(self, collection, record_id):
-        self.users.pop(record_id, None)
+        if collection == "api_tokens":
+            self.api_tokens.pop(record_id, None)
+        else:
+            self.users.pop(record_id, None)
 
     def authenticate_user(self, token):
         if token != "valid-token":
@@ -59,6 +94,71 @@ def test_current_user_is_taken_only_from_authenticated_token():
     assert service.current_user("valid-token") == "user-a"
     with pytest.raises(ApiError, match="登录已失效"):
         service.current_user("forged-user-id")
+
+
+def test_current_user_accepts_api_token():
+    """sk_ prefixed API Tokens should authenticate via the api_tokens table."""
+    pb = FakePocketBase()
+    service = ClipService(pb)
+
+    # Generate token, then authenticate with it
+    result = service.generate_api_token("user-a", "test")
+    raw_token = result["token"]
+    assert raw_token.startswith("sk_")
+
+    user_id = service.current_user(raw_token)
+    assert user_id == "user-a"
+
+
+def test_current_user_rejects_invalid_api_token():
+    service = ClipService(FakePocketBase())
+    with pytest.raises(ApiError, match="API Token 无效"):
+        service.current_user("sk_not_a_real_token")
+
+
+def test_generate_api_token_returns_once_and_stores_hash():
+    pb = FakePocketBase()
+    service = ClipService(pb)
+
+    result = service.generate_api_token("user-a", "MacBook")
+    assert result["token"].startswith("sk_")
+    assert result["label"] == "MacBook"
+
+    # Verify the hash was stored, not the raw token
+    stored = list(pb.api_tokens.values())[0]
+    assert "token_hash" in stored
+    assert stored["token_hash"] == hashlib.sha256(result["token"].encode()).hexdigest()
+
+
+def test_list_api_tokens_returns_metadata_only():
+    pb = FakePocketBase()
+    service = ClipService(pb)
+
+    service.generate_api_token("user-a", "iPhone")
+    tokens = service.list_api_tokens("user-a")
+    assert len(tokens) == 1
+    assert tokens[0]["label"] == "iPhone"
+    assert "token_hash" not in tokens[0]
+
+
+def test_delete_api_token_removes_record():
+    pb = FakePocketBase()
+    service = ClipService(pb)
+
+    result = service.generate_api_token("user-a", "temp")
+    token_id = result["id"]
+
+    service.delete_api_token("user-a", token_id)
+    assert len(pb.api_tokens) == 0
+
+
+def test_delete_api_token_rejects_wrong_owner():
+    pb = FakePocketBase()
+    service = ClipService(pb)
+
+    service.generate_api_token("user-a", "mine")
+    with pytest.raises(ApiError, match="Token 不存在"):
+        service.delete_api_token("user-b", list(pb.api_tokens.values())[0]["id"])
 
 
 def test_login_returns_pocketbase_session_without_password():

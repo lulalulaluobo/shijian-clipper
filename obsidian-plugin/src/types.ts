@@ -1,8 +1,8 @@
 export interface ShijianSettings {
   /** 后端服务地址，如 "https://wechat.lucc.fun" */
   baseUrl: string;
-  email: string;
-  password: string;
+  /** API Token，从网页端设置中心生成 */
+  apiToken: string;
   /** 文章保存目录，默认 "公众号收藏" */
   articlesDir: string;
   /** 图片与附件保存目录，默认 "公众号收藏/assets" */
@@ -11,6 +11,8 @@ export interface ShijianSettings {
   pollIntervalSeconds: number;
   /** 是否自动轮询，默认 true */
   autoSync: boolean;
+  /** 是否下载图片到本地，默认 false（外链） */
+  downloadImagesLocally: boolean;
 }
 
 export type NoteKind = "article" | "attachment";
@@ -45,17 +47,12 @@ export interface AckResponse {
   acked: number;
 }
 
-export interface LoginResponse {
-  token: string;
-  user: { id: string; email: string };
-}
-
 export const DEFAULT_SETTINGS: ShijianSettings = {
   baseUrl: "",
-  email: "",
-  password: "",
+  apiToken: "",
   articlesDir: "公众号收藏",
   attachmentsDir: "公众号收藏/assets",
   pollIntervalSeconds: 5,
   autoSync: true,
+  downloadImagesLocally: false,
 };

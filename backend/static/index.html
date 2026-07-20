@@ -494,12 +494,17 @@
     </div>
     <div class="settings-content">
       
-      <!-- OBSIDIAN SYNC CARD -->
+      <!-- API TOKEN MANAGEMENT CARD -->
       <div class="card">
-        <h3 class="card-title">Obsidian 同步</h3>
-        <p style="font-size:0.85rem; color:var(--muted); margin:0;">
-          文章将在服务端抓取后自动同步到你的 Obsidian 仓库。请在 Obsidian 桌面或移动端安装「拾笺同步」插件，并使用本服务账号登录。
+        <h3 class="card-title">Obsidian 同步 Token</h3>
+        <p style="font-size:0.85rem; color:var(--muted); margin:0 0 16px;">
+          在 Obsidian 插件设置中填入此 Token 即可同步。Token 仅在生成时展示一次，请妥善保存。
         </p>
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <input type="text" id="token-label" placeholder="备注（可选），如 MacBook" style="flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:0.9rem; background:var(--panel);">
+          <button class="btn" onclick="generateApiToken()">生成 Token</button>
+        </div>
+        <div id="token-list" style="font-size:0.85rem; color:var(--muted);">加载中...</div>
       </div>
 
       <!-- MEMBER INVITE CARD -->
@@ -514,6 +519,19 @@
         <button class="btn btn-danger" onclick="handleLogout()">退出登录</button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- TOKEN REVEAL MODAL -->
+  <div id="token-modal" style="display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center;">
+    <div style="background:var(--panel); border-radius:12px; padding:24px; max-width:420px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <h3 style="margin:0 0 8px; font-size:1.1rem;">🔑 API Token 已生成</h3>
+      <p style="font-size:0.8rem; color:var(--alert); margin:0 0 12px;">请立即复制并妥善保存，关闭后将无法再次查看。</p>
+      <div style="background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:12px; font-family:monospace; font-size:0.82rem; word-break:break-all; user-select:all;" id="token-reveal-text"></div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button class="btn" onclick="copyRevealedToken()" style="flex:1;">复制 Token</button>
+        <button class="btn btn-secondary" onclick="closeTokenModal()" style="flex:1;">关闭</button>
+      </div>
     </div>
   </div>
 
@@ -621,6 +639,7 @@
     function onAuthenticated() {
       fetchClips();
       checkInvitePermission();
+      fetchApiTokens();
       if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(fetchClips, 5000);
     }
@@ -830,10 +849,102 @@
 
     function openSettings() {
       document.getElementById("settings-screen").classList.add("open");
+      fetchApiTokens();
     }
 
     function closeSettings() {
       document.getElementById("settings-screen").classList.remove("open");
+    }
+    // ---------- API Token Management ----------
+
+    let lastRevealedToken = "";
+
+    async function generateApiToken() {
+      const label = document.getElementById("token-label").value.trim();
+      try {
+        const res = await fetch("/v1/api-tokens", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${TOKEN}` },
+          body: JSON.stringify({ label })
+        });
+        const data = await res.json();
+        if (res.status === 201 && data.token) {
+          lastRevealedToken = data.token;
+          document.getElementById("token-reveal-text").innerText = data.token;
+          document.getElementById("token-modal").style.display = "flex";
+          document.getElementById("token-label").value = "";
+          fetchApiTokens();
+        } else {
+          showToast(data.message || "生成 Token 失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
+    }
+
+    function copyRevealedToken() {
+      navigator.clipboard.writeText(lastRevealedToken).then(() => {
+        showToast("Token 已复制到剪贴板");
+      }).catch(() => {
+        showToast("复制失败，请手动选中复制");
+      });
+    }
+
+    function closeTokenModal() {
+      document.getElementById("token-modal").style.display = "none";
+      lastRevealedToken = "";
+    }
+
+    async function fetchApiTokens() {
+      if (!TOKEN) return;
+      try {
+        const res = await fetch("/v1/api-tokens", {
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data)) {
+          renderApiTokens(data);
+        }
+      } catch (err) {}
+    }
+
+    function renderApiTokens(tokens) {
+      const list = document.getElementById("token-list");
+      if (tokens.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:var(--muted); padding:8px;">暂无 Token，点击上方按钮生成</div>';
+        return;
+      }
+      list.innerHTML = tokens.map(t => {
+        const time = new Date(t.created).toLocaleString();
+        const label = t.label ? escapeHtml(t.label) : '<em>无备注</em>';
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);">
+            <div>
+              <span style="font-weight:500;">${label}</span>
+              <span style="color:var(--muted); font-size:0.8rem; margin-left:8px;">${time}</span>
+            </div>
+            <button class="btn btn-secondary" style="padding:4px 12px; font-size:0.8rem;" onclick="deleteApiToken('${t.id}')">删除</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function deleteApiToken(tokenId) {
+      try {
+        const res = await fetch(`/v1/api-tokens/${tokenId}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${TOKEN}` }
+        });
+        if (res.status === 204) {
+          showToast("Token 已删除");
+          fetchApiTokens();
+        } else {
+          const data = await res.json();
+          showToast(data.message || "删除失败");
+        }
+      } catch (err) {
+        showToast("网络请求失败");
+      }
     }
   </script>
 </body>

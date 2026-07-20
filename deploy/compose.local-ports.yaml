@@ -1,0 +1,11 @@
+services:
+  caddy:
+    ports:
+      - "8800:80"
+      - "8443:443"
+  api:
+    ports:
+      - "18000:8000"
+  pocketbase:
+    ports:
+      - "18090:8090"
