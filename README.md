@@ -4,7 +4,7 @@
 
 > ⚠️ **v0.3.0 breaking change**: Fast Note Sync (FNS) integration has been removed and replaced with a self-built Obsidian sync plugin. Existing users need to: 1) uninstall the FNS Service (no longer required); 2) install the new sync plugin in Obsidian. See the [migration guide](docs/migration-fns-to-plugin.md).
 
-Shijian is an Android and Python service for capturing WeChat public-account articles into an Obsidian vault through a self-built Obsidian sync plugin. This repository contains the Android client, API, Worker, PocketBase migrations, and local H5 debugging PoC.
+Shijian is an Android and Python service for capturing WeChat public-account articles into an Obsidian vault through a self-built Obsidian sync plugin. This repository contains the Android client, API, Worker, and PocketBase migrations.
 
 ## Android app
 
@@ -90,14 +90,6 @@ sh -c 'cd android && ./gradlew :app:testDebugUnitTest :app:assembleRelease'
 Publish `android/app/build/outputs/apk/release/app-release.apk` as a GitHub Release asset named `Shijian-v<versionName>-<versionCode>-release.apk`, with a matching tag `v<versionName>`. GitHub calculates and exposes the asset `sha256` digest through its Release API; the app rejects releases without that digest, unexpected asset names/URLs, mismatched package metadata, or a certificate different from the installed app. Installation is never silent: users confirm the download in the app and the install in Android.
 
 The first signed release cannot upgrade an older Debug-signed installation. Test users must uninstall the Debug APK, install the signed release, and log in again. Subsequent releases signed with the same keystore upgrade normally.
-
-## Local H5 PoC
-
-```bash
-python3 -m poc.server
-```
-
-Open `http://127.0.0.1:8765`. FNS API tokens are kept only in memory in the H5 page and are not saved to browser storage.
 
 Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys. Sensitive configuration is not embedded in the APK; the Obsidian plugin only stores and uses the API Token generated from the web settings.
 

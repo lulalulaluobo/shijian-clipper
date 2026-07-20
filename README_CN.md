@@ -4,7 +4,7 @@
 
 > ⚠️ **v0.3.0 破坏性变更**：移除了 Fast Note Sync (FNS) 集成，改用自研 Obsidian 同步插件。老用户需要：1) 卸载 FNS Service（不再需要）；2) 在 Obsidian 中安装新的同步插件。详见 [迁移指南](docs/migration-fns-to-plugin.md)。
 
-拾笺由 Android 客户端与 Python 服务组成，用于将微信公众号文章通过自研 Obsidian 同步插件转存到 Obsidian。本仓库包含 Android 客户端、API、Worker、PocketBase 迁移和本地 H5 调试页。
+拾笺由 Android 客户端与 Python 服务组成，用于将微信公众号文章通过自研 Obsidian 同步插件转存到 Obsidian。本仓库包含 Android 客户端、API、Worker 与 PocketBase 迁移。
 
 ## Android App
 
@@ -91,14 +91,6 @@ sh -c 'cd android && ./gradlew :app:testDebugUnitTest :app:assembleRelease'
 把 `android/app/build/outputs/apk/release/app-release.apk` 上传为 GitHub Release 附件，命名必须是 `Shijian-v<versionName>-<versionCode>-release.apk`，标签必须是 `v<versionName>`。GitHub 会在 Release API 提供附件的 `sha256` 摘要；App 会拒绝没有摘要、资产名称/地址异常、包信息不匹配或签名证书不同的更新。安装绝不会静默执行：用户要先在 App 中确认下载，再在 Android 系统安装页确认安装。
 
 第一版正式签名包不能覆盖 Debug 签名的旧 APK。测试用户需先卸载 Debug APK，再安装正式包并重新登录；之后使用同一 keystore 签名的版本可以正常覆盖升级。
-
-## 本地 H5 PoC
-
-```bash
-python3 -m poc.server
-```
-
-打开 `http://127.0.0.1:8765`。H5 页面中的 FNS API token 只保留在当前内存中，不会写入浏览器存储。
 
 Docker Compose、PocketBase 管理和日常维护说明见 [deploy/README.md](deploy/README.md)。若希望让 AI 代理连接 VPS 完成 Docker 与 Nginx 部署，请使用 [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md)。不要提交 `.env`、FNS token 或签名密钥。敏感配置不写入 APK 包内；Obsidian 插件仅存储并使用从网页端生成的 API Token。
 
