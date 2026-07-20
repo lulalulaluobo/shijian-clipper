@@ -72,7 +72,7 @@ class E2EFakePocketBase:
             return []
         return []
 
-    def list_records_sorted(self, collection, filter_value, sort="created", per_page=50):
+    def list_records_sorted(self, collection, filter_value, sort="created", per_page=50, page=1):
         # list_pending_notes 用：按 user + delivered 过滤，按 created 升序
         # 简单解析 filter 里的 user 条件
         result = [n for n in self.notes.values() if not n.get("delivered")]
@@ -82,7 +82,8 @@ class E2EFakePocketBase:
             m = re.search(r'user = "([^"]+)"', filter_value)
             if m:
                 result = [n for n in result if n.get("user") == m.group(1)]
-        return sorted(result, key=lambda x: x.get("created", ""))[:per_page]
+        start = (page - 1) * per_page
+        return sorted(result, key=lambda x: x.get("id", ""))[start : start + per_page]
 
     def create_user(self, email, password):
         self._user_counter += 1
