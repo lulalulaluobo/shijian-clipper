@@ -98,9 +98,7 @@ python3 -m poc.server
 
 Open `http://127.0.0.1:8765`. FNS API tokens are kept only in memory in the H5 page and are not saved to browser storage.
 
-## Deployment
-
-Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys. Sensitive configuration is not embedded in the APK; the Obsidian plugin stores its account credentials in plaintext inside the plugin `data.json` in your Vault.
+Production deployment, PocketBase administration, and Docker Compose instructions are in [deploy/README.md](deploy/README.md). For an AI agent-operated VPS deployment with Nginx, see [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md). Never commit `.env`, FNS tokens, or signing keys. Sensitive configuration is not embedded in the APK; the Obsidian plugin only stores and uses the API Token generated from the web settings.
 
 ## Obsidian sync plugin
 
@@ -122,7 +120,7 @@ Copy `main.js` and `manifest.json` into your Obsidian Vault's `.obsidian/plugins
 
 On the plugin settings page, fill in:
 - Backend service URL (e.g. `https://wechat.example.com`)
-- The email and password you registered with
+- The API Token generated from the web console (format: `sk_...`)
 - Article folder (default `公众号收藏`)
 - Attachment folder (default `公众号收藏/assets`)
 - Polling interval (default 5 seconds)
@@ -133,4 +131,4 @@ Android/iOS clients submit article URLs to the backend → the Worker fetches th
 
 ### Privacy
 
-The password is stored in plaintext inside the Vault's `.obsidian/plugins/shijian-sync/data.json`. Keep your device secure.
+The API Token is stored inside the Vault's `.obsidian/plugins/shijian-sync/data.json`. Since this token is restricted to the synchronization API, leaking it does not compromise your main account credentials.

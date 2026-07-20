@@ -22,3 +22,8 @@ deploy/.env
 *.jks
 *.keystore
 android/release.properties
+
+# IDE configurations
+.idea/
+.zcode/
+.antigravityignore

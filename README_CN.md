@@ -99,9 +99,7 @@ python3 -m poc.server
 
 打开 `http://127.0.0.1:8765`。H5 页面中的 FNS API token 只保留在当前内存中，不会写入浏览器存储。
 
-## 部署
-
-Docker Compose、PocketBase 管理和日常维护说明见 [deploy/README.md](deploy/README.md)。若希望让 AI 代理连接 VPS 完成 Docker 与 Nginx 部署，请使用 [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md)。不要提交 `.env`、FNS token 或签名密钥。敏感配置不写入 APK 包内；Obsidian 插件账号密码以明文存于 Vault 的插件 `data.json`。
+Docker Compose、PocketBase 管理和日常维护说明见 [deploy/README.md](deploy/README.md)。若希望让 AI 代理连接 VPS 完成 Docker 与 Nginx 部署，请使用 [deploy/AI_DEPLOYMENT.md](deploy/AI_DEPLOYMENT.md)。不要提交 `.env`、FNS token 或签名密钥。敏感配置不写入 APK 包内；Obsidian 插件仅存储并使用从网页端生成的 API Token。
 
 ## Obsidian 同步插件
 
@@ -117,13 +115,13 @@ npm run build
 
 ### 安装
 
-把 `main.js`、`manifest.json` 复制到 Obsidian Vault 的 `.obsidian/plugins/shijian-sync/` 目录，然后在 Obsidian 设置的第三方插件里启用「拾笺同步」。
+把 `main.js`、`manifest.json` 复制到 Obsidian Vault 的 `.obsidian/plugins/shijian-sync/` 目录，然后在 Obsidian 设置 of 第三方插件里启用「拾笺同步」。
 
 ### 配置
 
 在插件设置页填写：
 - 后端服务地址（如 `https://wechat.example.com`）
-- 注册时的邮箱和密码
+- 网页端生成的 API Token (格式如 `sk_...`)
 - 文章目录（默认 `公众号收藏`）
 - 附件目录（默认 `公众号收藏/assets`）
 - 轮询间隔（默认 5 秒）
@@ -134,4 +132,4 @@ Android/iOS 客户端提交文章 URL 到后端 → Worker 抓取公众号文章
 
 ### 隐私
 
-密码以明文保存在 Vault 的 `.obsidian/plugins/shijian-sync/data.json`，请确保设备安全。
+API Token 保存在 Vault 的 `.obsidian/plugins/shijian-sync/data.json`。由于 Token 仅限同步接口，即使泄露也不会暴露你的主账号密码。
