@@ -232,12 +232,21 @@ class ClipService:
         return {"id": record.get("id"), "filename": filename}
 
     def list_pending_notes(self, user_id: str, since_cursor: str, limit: int = 50) -> list[dict]:
-        """返回该用户 delivered=0（未交付）的 notes，按 id 排序。"""
+        """返回该用户 delivered=0（未交付）的 notes，按 created 与 id 排序。"""
         filter_value = f'user = "{user_id}" && delivered = 0'
         if since_cursor:
-            filter_value += f' && id > "{since_cursor}"'
+            created, separator, record_id = since_cursor.partition("|")
+            try:
+                datetime.fromisoformat(created.replace("Z", "+00:00"))
+            except ValueError:
+                pass  # 兼容旧版随机 id cursor：安全地从所有未交付记录重新扫描。
+            else:
+                if separator and record_id.isalnum():
+                    filter_value += f' && (created > "{created}" || (created = "{created}" && id > "{record_id}"))'
+                elif not separator:
+                    filter_value += f' && created > "{created}"'
         records = self.pocketbase.list_records_sorted(
-            "notes", filter_value, sort="id", per_page=limit
+            "notes", filter_value, sort="created,id", per_page=limit
         )
         return [self._note_summary(record) for record in records]
 

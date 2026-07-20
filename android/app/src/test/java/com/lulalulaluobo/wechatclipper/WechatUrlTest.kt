@@ -96,6 +96,20 @@ class WechatUrlTest {
     }
 
     @Test
+    fun parsesGeneratedApiTokenAndTokenListMetadata() {
+        val generated = apiTokenFrom(
+            org.json.JSONObject("""{"id":"token-1","token":"sk_once","label":"Obsidian"}"""),
+        )
+        val tokens = apiTokensFrom(
+            org.json.JSONArray("""[{"id":"token-1","label":"Obsidian","created":"2026-07-20T10:00:00Z"}]"""),
+        )
+
+        assertEquals("sk_once", generated.token)
+        assertEquals("Obsidian", tokens.single().label)
+        assertEquals("2026-07-20T10:00:00Z", tokens.single().created)
+    }
+
+    @Test
     fun ignoresReleaseThatIsNotNewerThanInstalledApp() {
         assertNull(
             parseReleaseUpdate(

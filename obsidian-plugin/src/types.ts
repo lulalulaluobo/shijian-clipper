@@ -37,7 +37,7 @@ export interface NoteEntry {
 
 export interface SyncChangesResponse {
   notes: NoteEntry[];
-  /** 本批次最大 note id，作为下次增量请求的 cursor */
+  /** 服务端返回的 opaque cursor，作为下次增量请求的 since 参数 */
   last_id: string;
   /** 服务端当前时间（ISO8601），仅用于调试 */
   server_time: string;

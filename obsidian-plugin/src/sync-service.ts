@@ -17,8 +17,7 @@ interface PluginData {
 /**
  * 同步主逻辑。
  *
- * cursor 用 note id（PocketBase 0.38 record id 是按时间单调递增的 base32 字符串，
- * 比 created 字段更可靠）。响应里的 last_id 是本批次最大 id，作为下次请求的 cursor。
+ * cursor 由服务端生成并视为 opaque 值。响应里的 last_id 用作下次请求的 cursor。
  * 单条失败不中断整批；已成功的 note 仍会 ack，避免反复重试。
  */
 export class SyncService {

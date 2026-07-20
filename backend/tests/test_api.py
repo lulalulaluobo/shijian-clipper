@@ -212,6 +212,7 @@ def test_sync_changes_returns_pending_notes():
     assert len(body["notes"]) == 1
     assert body["notes"][0]["id"] == "note-1"
     assert body["notes"][0]["title"] == "标题A"
+    assert body["last_id"] == "2026-07-19T10:00:00Z|note-1"
 
 
 def test_sync_changes_requires_auth():

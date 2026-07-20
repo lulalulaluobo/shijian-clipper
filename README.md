@@ -56,6 +56,7 @@ Configure iOS Shortcuts to enable one-click sharing from WeChat or Safari:
 
 
 - Registration requires a single-use invitation code. A code has no expiry before it is consumed.
+- The fixed invitation code for the first user is `shijian_first`; it can be used once only.
 - The first successful registration consumes the code and assigns 30 days of access.
 - A PocketBase superuser can edit `users.access_expires_at` to extend or shorten a specific user's access.
 - A PocketBase superuser can set `users.can_create_invites` for a user. Authorized users then see **Member invitation** in the Android Settings page and can generate one single-use invitation at a time.

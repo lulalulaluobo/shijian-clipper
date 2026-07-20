@@ -8,6 +8,8 @@ import java.net.URL
 data class Session(val baseUrl: String, val token: String)
 data class ClipTask(val id: String, val sourceUrl: String, val status: String, val title: String, val errorMessage: String)
 data class AttachmentUploadResult(val id: String, val filename: String)
+data class ApiToken(val id: String, val label: String, val created: String)
+data class GeneratedApiToken(val id: String, val token: String, val label: String)
 
 class ApiException(override val message: String) : Exception(message)
 
@@ -24,6 +26,16 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
     fun canCreateInvites(): Boolean = request("GET", "/v1/invites").optBoolean("can_create")
 
     fun createInvite(): String = request("POST", "/v1/invites").requiredString("code")
+
+    fun createApiToken(label: String): GeneratedApiToken = apiTokenFrom(
+        request("POST", "/v1/api-tokens", JSONObject().put("label", label)),
+    )
+
+    fun listApiTokens(): List<ApiToken> = apiTokensFrom(requestArray("/v1/api-tokens"))
+
+    fun deleteApiToken(tokenId: String) {
+        request("DELETE", "/v1/api-tokens/$tokenId")
+    }
 
     fun createClip(url: String): ClipTask = taskFrom(request("POST", "/v1/clips", JSONObject().put("url", url)))
 
@@ -115,6 +127,30 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
         }
     }
 
+    private fun requestArray(path: String): JSONArray {
+        val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 30_000
+            readTimeout = 30_000
+            setRequestProperty("Accept", "application/json")
+            token?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        return try {
+            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (connection.responseCode !in 200..299) {
+                throw ApiException(JSONObject(text.ifBlank { "{}" }).optString("message", "服务请求失败"))
+            }
+            JSONArray(text.ifBlank { "[]" })
+        } catch (error: ApiException) {
+            throw error
+        } catch (error: Exception) {
+            throw ApiException(error.message ?: "请求失败，请检查网络和服务地址。")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private fun taskFrom(value: JSONObject): ClipTask = ClipTask(
         id = value.requiredString("id"),
         sourceUrl = value.optString("source_url"),
@@ -126,3 +162,18 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
 
 private fun JSONObject.requiredString(name: String): String = optString(name).takeIf { it.isNotBlank() }
     ?: throw ApiException("服务响应无效")
+
+fun apiTokenFrom(value: JSONObject): GeneratedApiToken = GeneratedApiToken(
+    id = value.requiredString("id"),
+    token = value.requiredString("token"),
+    label = value.optString("label"),
+)
+
+fun apiTokensFrom(values: JSONArray): List<ApiToken> = List(values.length()) { index ->
+    val value = values.getJSONObject(index)
+    ApiToken(
+        id = value.requiredString("id"),
+        label = value.optString("label"),
+        created = value.optString("created"),
+    )
+}
